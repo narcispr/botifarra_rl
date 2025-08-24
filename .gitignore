@@ -1,0 +1,15 @@
+__pycache__/
+build/
+devel/
+logs/
+*.pyc
+*.egg-info
+*.egg
+*.so
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.bak
+*~
