@@ -14,7 +14,7 @@ class BotifarraEnv(Env, Botifarra):
         # Action space is an integer representing the index of the card to play
         self.action_space = spaces.Discrete(48)
         # Observation space can be defined based on the game state representation
-        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(342,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(390,), dtype=np.float32)
         self.jugador_inicial = 0  
         self.jugador_actual = 1 # El jugador que comença jugant és el de després del que ha cantat
         self.jugades_fetes = 0
@@ -25,7 +25,6 @@ class BotifarraEnv(Env, Botifarra):
         self.historic_mans = np.zeros((4, 48), dtype=int)  # Històric de cartes jugades i pals fallats per cada jugador
 
     def reset(self):
-        print("-------------- RESET ENV --------------\n\n")
         self.jugades_fetes = 0
         self.punts_equip_a = 0
         self.punts_equip_b = 0
@@ -45,8 +44,7 @@ class BotifarraEnv(Env, Botifarra):
         info['mask'] = one_hot_encode_hand(ma_valida)  # Màscara d'accions vàlides per al següent estat
 
         state = self.get_state(self.jugador_actual)
-        print("---------------------------------------\n\n")
-
+        
         return state, info
 
     def step(self, action):
@@ -72,12 +70,7 @@ class BotifarraEnv(Env, Botifarra):
             punts_jugada = sum(carta.get_punts() for carta in self.taula) + 1 # + 1 punt per cada jugada
             info['guanyador'] = guanyador + 1
             info['punts_jugada'] = punts_jugada
-            if guanyador % 2 == 0:
-                self.punts_equip_a += punts_jugada
-                reward = punts_jugada                                         # Si el reward és positu és que ha guanyat l'equip A
-            else:
-                self.punts_equip_b += punts_jugada
-                reward = -punts_jugada
+            reward = punts_jugada                                         # Si el reward és positu és que ha guanyat l'equip A
             self.taula = []
             self.jugador_actual = guanyador
             self.jugades_fetes += 1
@@ -95,7 +88,7 @@ class BotifarraEnv(Env, Botifarra):
                 for i in range(12 * self.taula[0].pal, 12 * self.taula[0].pal + 12):
                     if self.historic_mans[self.jugador_actual, i] == 0:
                         self.historic_mans[self.jugador_actual, i] = -1
-            if falla_trumfo:
+            if falla_trumfo and self.trumfo != BOTIFARRA:
                 for i in range(12 * self.trumfo, 12 * self.trumfo + 12):
                     if self.historic_mans[self.jugador_actual, i] == 0:
                         self.historic_mans[self.jugador_actual, i] = -1
@@ -108,14 +101,17 @@ class BotifarraEnv(Env, Botifarra):
     def get_state(self, id_jugador: int):
         # Retorna l'estat actual del joc com un diccionari o una altra estructura de dades
         state = encode_estat(self.trumfo, self.jugadors[id_jugador].ma, self.taula)
+
         # Afegir l'històric de jugades del jugador
         state.extend(self.historic_mans[id_jugador].tolist()) # Afegir l'històric de jugades del jugador actual
         state.extend(self.historic_mans[(id_jugador+2)%4].tolist()) # Afegir l'històric de jugades del company del jugador actual
         state.extend(self.historic_mans[(id_jugador+1)%4].tolist()) # Afegir l'històric de jugades del rival dreta del jugador actual
         state.extend(self.historic_mans[(id_jugador+3)%4].tolist()) # Afegir l'històric de jugades del rival esquerra del jugador actual
+
         # Afegir els punts de l'equip del jugador i del rival normalitzats
         if id_jugador % 2 == 0:
             state.extend([float(self.punts_equip_a/72), float(self.punts_equip_b/72)]) 
         else:
             state.extend([float(self.punts_equip_b/72), float(self.punts_equip_a/72)])
-        return state
+
+        return np.array(state, dtype=np.float32)

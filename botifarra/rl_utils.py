@@ -35,7 +35,7 @@ def one_hot_encode_taula(taula: list) -> list:
     encoding = []
     for carta in taula:
         encoding.extend(one_hot_encode_hand([carta]))
-    for i in range(4 - len(taula)):
+    for i in range(3 - len(taula)):
         encoding.extend([0] * 48)
     return encoding
 

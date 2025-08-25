@@ -15,10 +15,10 @@ class Carta:
         self.valor = {2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 10: 8, 11: 9, 12: 10, 1: 11, 9: 12}.get(numero, 0)
 
     def __repr__(self):
-        return f"{self.numero}-{self.nom_pal}"
+        return f"{self.numero}{self.nom_pal}"
     
     def __str__(self):
-        return f"{self.numero} de {self.nom_pal}"
+        return f"{self.numero}{self.nom_pal}"
     
     def __eq__(self, other):
         return self.pal == other.pal and self.numero == other.numero

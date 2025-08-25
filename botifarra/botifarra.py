@@ -47,17 +47,18 @@ class Botifarra:
         baralla.barreja()
         for i in range(4):
             self.jugadors[i].ma = baralla.reparteix(12)
-            print(f"{self.jugadors[i]}")
+            # print(f"{self.jugadors[i]}")
     
     def cantar_trumfo(self, jugador_inicial: int) -> int:
         # Cantar 
         trumfo = self.jugadors[jugador_inicial].cantar()
         if trumfo == -1:
-            print(f"El jugador {jugador_inicial + 1} ha delegat el cant.")
+            # print(f"El jugador {jugador_inicial + 1} ha delegat el cant.")
             trumfo = self.jugadors[(jugador_inicial + 2) % 4].cantar(delegat=True)
-            print(f"El jugador {(jugador_inicial + 2) % 4 + 1} canta el pal {self.pals[trumfo]}.")
+            # print(f"El jugador {(jugador_inicial + 2) % 4 + 1} canta el pal {self.pals[trumfo]}.")
         else:
-            print(f"El jugador {jugador_inicial + 1} canta el pal {self.pals[trumfo]}.")
+            # print(f"El jugador {jugador_inicial + 1} canta el pal {self.pals[trumfo]}.")
+            pass
         
         return trumfo
     
