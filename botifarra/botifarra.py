@@ -41,6 +41,26 @@ class Botifarra:
         print(f"Jugador {guanyador + 1} guanya la jugada i fa {punts_jugada} punts.")
         return guanyador, punts_jugada
     
+    def repartir_cartes(self):
+        # Repartir cartes
+        baralla = Baralla()
+        baralla.barreja()
+        for i in range(4):
+            self.jugadors[i].ma = baralla.reparteix(12)
+            print(f"{self.jugadors[i]}")
+    
+    def cantar_trumfo(self, jugador_inicial: int) -> int:
+        # Cantar 
+        trumfo = self.jugadors[jugador_inicial].cantar()
+        if trumfo == -1:
+            print(f"El jugador {jugador_inicial + 1} ha delegat el cant.")
+            trumfo = self.jugadors[(jugador_inicial + 2) % 4].cantar(delegat=True)
+            print(f"El jugador {(jugador_inicial + 2) % 4 + 1} canta el pal {self.pals[trumfo]}.")
+        else:
+            print(f"El jugador {jugador_inicial + 1} canta el pal {self.pals[trumfo]}.")
+        
+        return trumfo
+    
     def jugar_ma(self, jugador_inicial: int):
         """
         Simula una mà completa de botifarra (12 jugades).
@@ -48,20 +68,10 @@ class Botifarra:
         punts_a = 0
         punts_b = 0
         # Repartir cartes
-        baralla = Baralla()
-        baralla.barreja()
-        for i in range(4):
-            self.jugadors[i].ma = baralla.reparteix(12)
-            print(f"{self.jugadors[i]}")
+        self.repartir_cartes()
         
         # Cantar 
-        trumfo = self.jugadors[jugador_inicial].cantar()
-        if trumfo == -1:
-            print(f"El jugador {jugador_inicial + 1} ha delegat el cant.")
-            trumfo = self.jugadors[(jugador_inicial + 2) % 4].cantar(delegar=True)
-            print(f"El jugador {(jugador_inicial + 2) % 4 + 1} canta el pal {self.pals[trumfo]}.")
-        else:
-            print(f"El jugador {jugador_inicial + 1} canta el pal {self.pals[trumfo]}.")
+        trumfo = self.cantar_trumfo(jugador_inicial)
         
         # Simular les 12 jugades
         j = (jugador_inicial + 1) % 4

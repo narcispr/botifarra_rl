@@ -1,5 +1,8 @@
 from botifarra.carta import Carta
+from botifarra.pals import OROS, COPES, ESPASES, BASTOS, BOTIFARRA
+
 import random
+from typing import List, Tuple
 
 class Jugador:
     """
@@ -9,22 +12,47 @@ class Jugador:
         self.ma: list[Carta] = []
         self.id : int = id  # Identificador del jugador (0..3)
 
-    def cantar(self, delegar: bool = False) -> int:
+    def cantar(self, delegat: bool = False) -> int:
         """
         Retorna el pal (de 0 a 3) que canta el jugador.
         Per cantar botifarra retorna 4.
         Si delega retorna -1.
         """
         # De moment, retorna un valor aleator i de 0 a 4
-        return random.choice([0, 1, 2, 3, 4])
-
-    def __cartes_pal__(self, pal: int) -> list:
+        oros = self.__cartes_pal__(OROS)
+        copes = self.__cartes_pal__(COPES)
+        espases = self.__cartes_pal__(ESPASES)
+        bastos = self.__cartes_pal__(BASTOS)
+        # Si tenim 5 o més cartes d'algun pal, el cantem (no mirem el semi-fallo....)
+        if len(oros) >= 5:
+            return OROS
+        elif len(copes) >= 5:
+            return COPES
+        elif len(espases) >= 5:
+            return ESPASES
+        elif len(bastos) >= 5:
+            return BASTOS
+        
+        # Si tenim molts trumfos cantem botifarra
+        if sum(carta.get_punts() for carta in self.ma) >= 24:
+            return BOTIFARRA
+        
+        # Si no podem cantar però podem delegar, deleguem
+        if not delegat:
+            return -1
+        else:
+            # Si no podem delegar, cantem el pal que més cartes tenim
+            cartes_pals = [len(oros), len(copes), len(espases), len(bastos)]
+            max_cartes = max(cartes_pals)
+            return cartes_pals.index(max_cartes)
+        
+    def __cartes_pal__(self, pal: int) -> List[Carta]:
         return [carta for carta in self.ma if carta.pal == pal]
     
-    def __trumfos__(self, trumfo: int) -> list:
+    def __trumfos__(self, trumfo: int) -> List[Carta]:
         return [carta for carta in self.ma if carta.pal == trumfo]
     
-    def __guanya_a__(self, cartes: list, carta: Carta, trumfo: int, pal_jugada: int) -> list:
+    def __guanya_a__(self, cartes: List[Carta], carta: Carta, trumfo: int, pal_jugada: int) -> List[Carta]:
         """
         Retorna totes les cartes de la llista `cartes` que guanyen a `carta`.
         """
@@ -34,36 +62,46 @@ class Jugador:
                 guanyadores.append(c)
         return guanyadores
     
-    def __hem_de_matar__(self, taula: list, matar_idx: int, del_pal: list, trumfos: list, trumfo: int) -> list:
+    def __hem_de_matar__(self, taula: List[Carta], matar_idx: int, del_pal: List[Carta], trumfos: List[Carta], trumfo: int) -> Tuple[List[Carta], bool, bool]:
+        falla_pal = False
+        falla_trumfo = False
+
         if len(del_pal) > 0:   
             # ... i tenim Pal de la carta jugada:
             del_pal_mata = self.__guanya_a__(del_pal, taula[matar_idx], trumfo, taula[0].pal)
             if len(del_pal_mata) > 0:
                 # tornem totes les que poden matar.
-                return del_pal_mata
+                return del_pal_mata, falla_pal, falla_trumfo
             else:
                 # tornem la més petita
-                return [min(del_pal)]
+                return [min(del_pal)], falla_pal, falla_trumfo
         # ... i no tenim Pal de la carta jugada ... 
+        falla_pal = True
         if len(trumfos) > 0:
             # ...pero tenim trumfos: Tornem tots els trumfos que maten
             trumfo_mata = self.__guanya_a__(trumfos, taula[matar_idx], trumfo, taula[0].pal)
             if len(trumfo_mata) > 0:
                 # tornem totes les que poden matar.
-                return trumfo_mata
+                return trumfo_mata, falla_pal, falla_trumfo
             else:
             # ... ni trumfos que matin: Tornem totes les cartes
-                return self.ma
+                return self.ma, falla_pal, falla_trumfo
         # ... si no tenim ni pal ni trumfos: Tornem totes les cartes
-        return self.ma
+        falla_trumfo = True
+        return self.ma, falla_pal, falla_trumfo
         
-    def cartes_valides(self, trumfo: int, taula: list) -> list:
+    def cartes_valides(self, trumfo: int, taula: list) -> Tuple[List[Carta], bool, bool]:
         """
         Retorna la llista de cartes que el jugador pot jugar segons les regles.
+        També torna 2 bolleans indican si fall pal i si falla trumfo en cas que amb
+        el que ha tirat és pugui saber, altrament False.
         """
+        falla_pal = False
+        falla_trumfo = False
+
         # Primer jugador: Pot tirar el que vulgui
         if len(taula) == 0:
-            return self.ma
+            return self.ma, falla_pal, falla_trumfo
         
         trumfos = self.__trumfos__(trumfo)
         del_pal = self.__cartes_pal__(taula[0].pal)
@@ -79,10 +117,11 @@ class Jugador:
             if (taula[0].get_valor(taula[0].pal, trumfo) > taula[1].get_valor(taula[0].pal, trumfo)):
                 if len(del_pal) > 0:
                     # Si tenim cartes del pal, qualsevol del pal és vàlida
-                    return del_pal
+                    return del_pal, falla_pal, falla_trumfo
                 else:
                     # Si no tenim cartes del pal, qualsevol és vàlida
-                    return self.ma
+                    falla_pal = True
+                    return self.ma, falla_pal, falla_trumfo
             # ... i la mà no és del company:
             else:
                 # Hem de matar si podem
@@ -96,10 +135,11 @@ class Jugador:
                 taula[2].get_valor(taula[0].pal, trumfo)):
                 if len(del_pal) > 0:
                     # Si tenim cartes del pal, qualsevol del pal és vàlida
-                    return del_pal
+                    return del_pal, falla_pal, falla_trumfo
                 else:
                     # Si no tenim cartes del pal, qualsevol és vàlida
-                    return self.ma
+                    falla_pal = True
+                    return self.ma, falla_pal, falla_trumfo
             # ... i la mà no és del company:
             else:
                 # Si podem, hem de matar la carta més alta dels jugadors rivals
@@ -112,9 +152,9 @@ class Jugador:
             raise ValueError("La taula ja té més de 3 cartes!")
 
     def jugar(self, trumfo: int, taula: list) -> Carta:
-        ma_valida = self.cartes_valides(trumfo, taula)
+        ma_valida, falla_pal, falla_trumfo = self.cartes_valides(trumfo, taula)
         carta = random.choice(ma_valida)
-        print(f"Jugador {self.id + 1} té {self.ma} de les quals {ma_valida} es poden jugar i juga {carta}.")
+        print(f"Jugador {self.id + 1} té {self.ma} de les quals {ma_valida} es poden jugar i juga {carta}. (falla_pal={falla_pal}, falla_trumfo={falla_trumfo})")
         self.ma.remove(carta)
         return carta
     
