@@ -37,6 +37,7 @@ class BotifarraEnv(Env, Botifarra):
         self.repartir_cartes()
         
         # Cantar 
+        info['canta'] = self.jugador_inicial + 1
         self.trumfo = self.cantar_trumfo(self.jugador_inicial)
         self.jugador_inicial = (self.jugador_inicial + 1) % 4
 
@@ -74,7 +75,18 @@ class BotifarraEnv(Env, Botifarra):
             self.taula = []
             self.jugador_actual = guanyador
             self.jugades_fetes += 1
+            if guanyador % 2 == 0:
+                self.punts_equip_a += punts_jugada
+            else:
+                self.punts_equip_b += punts_jugada
             if self.jugades_fetes == 12:
+                # S'ha completat la mà
+                if self.punts_equip_a > self.punts_equip_b:
+                    info['punts_equip_a'] = self.punts_equip_a - 36
+                    info['punts_equip_b'] = 0
+                else:
+                    info['punts_equip_a'] = 0
+                    info['punts_equip_b'] = self.punts_equip_b - 36
                 done = True
             info['mask'] = one_hot_encode_hand(self.jugadors[self.jugador_actual].ma)  # Màscara d'accions vàlides per la següent mà
 
