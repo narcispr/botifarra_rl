@@ -6,10 +6,10 @@ import numpy as np
 from botifarra.rl_utils import decode_action_card
 
 class DQNBotifarra(DQN):
-    def __init__(self, input_dims=390, n_actions=48, batch_size=32, gamma=0.99, epsilon=0.2, 
-                 lr=0.001, max_mem_size=1000000, eps_end=0.01, eps_dec=5e-4):
+    def __init__(self, input_dims=390, n_actions=48, batch_size=32, gamma=0.99, epsilon=0.8, 
+                 lr=0.001, max_mem_size=10000000, eps_end=0.01, eps_dec=5e-5, hidden_layers=[512, 256]):
         super().__init__(input_dims, n_actions, batch_size=batch_size, gamma=gamma, epsilon=epsilon, 
-                         lr=lr, max_mem_size=max_mem_size, eps_end=eps_end, eps_dec=eps_dec)
+                         lr=lr, max_mem_size=max_mem_size, eps_end=eps_end, eps_dec=eps_dec, hidden_layers=hidden_layers)
     
     def choose_action(self, observation, legal_actions_mask: np.ndarray, deterministic: bool=False) -> int:
         
@@ -42,8 +42,10 @@ class DQNBotifarra(DQN):
         eps_history = []
         
         for i in range(n_episodes):
-            if (i-1) % 1000 == 0:
+            if (i+1) % 1000 == 0:
                 print(f"Episode {i+1}/{n_episodes}")
+            if (i+1) % 1000 == 0:
+                self.save_weights(f"./tmp_dqn_{i+1}")
             done = False
             observation, info = env.reset()
             jugades_fetes = 0

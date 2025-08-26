@@ -95,18 +95,21 @@ class Botifarra:
         print(f"\Equip A {punts_a} punts contra {punts_b} de l'Equip B.")
         print(f"\nPunts final Equip A: {self.punts_equip_a}, Equip B: {self.punts_equip_b}")
 
+    def reset_joc(self):
+        self.punts_equip_a = 0
+        self.punts_equip_b = 0
+        self.j_inicial = 0
+
     def jugar_partida(self):
         """
         Simula una partida completa de botifarra fins que algun equip superi els 100 punts.
         """
-        self.punts_equip_a = 0
-        self.punts_equip_b = 0
-        j = 0  # jugador inicial
+        self.reset_joc()
         numero_ma = 1
         while self.punts_equip_a < 100 and self.punts_equip_b < 100:
             print(f"\nIniciant mà número {numero_ma}. Punts actuals - Equip A: {self.punts_equip_a}, Equip B: {self.punts_equip_b}")
-            self.jugar_ma(jugador_inicial=j)
-            j = (j + 1) % 4
+            self.jugar_ma(jugador_inicial=self.j_inicial)
+            self.j_inicial = (self.j_inicial + 1) % 4
             numero_ma += 1
         if self.punts_equip_a >= 100:
             print("\nL'Equip A guanya la partida!")
