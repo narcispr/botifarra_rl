@@ -64,6 +64,8 @@ class BotifarraEnv(Env, Botifarra):
 
         # Actualitzem l'històric de jugades amb la carta jugada
         self.historic_mans[self.jugador_actual, action] = 1
+        for i in range(1, 4):
+            self.historic_mans[(self.jugador_actual + i) % 4, action] = -1
 
         if len(self.taula) == 4: # S'ha completat una jugada
             idx_guanyador = self.__carta_guanyadora__(self.trumfo, self.taula)

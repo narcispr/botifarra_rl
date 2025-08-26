@@ -28,6 +28,9 @@ def decode_action_card(action: int) -> Carta:
     numero = (action % 12) + 1
     return Carta(pal, numero)
 
+def code_card(carta: Carta) -> int:
+    return carta.pal * 12 + (carta.numero - 1)
+
 def one_hot_encode_taula(taula: list) -> list:
     # Per cada carta a la taula, codificar-la amb la funció one-hot_encode_hand.
     # Concatenar totes les codificacions en una sola llista. Si la taula té menys de
