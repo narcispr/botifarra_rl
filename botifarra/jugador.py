@@ -12,6 +12,10 @@ class Jugador:
         self.ma: list[Carta] = []
         self.id : int = id  # Identificador del jugador (0..3)
 
+    def ordenar_ma(self):
+        # sort list ma by Carta.ordre 
+        self.ma.sort(key=lambda carta: carta.ordre)
+        
     def cantar(self, delegat: bool = False) -> int:
         """
         Retorna el pal (de 0 a 3) que canta el jugador.

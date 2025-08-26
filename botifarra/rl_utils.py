@@ -1,4 +1,5 @@
 from botifarra.carta import Carta
+from typing import List
 
 # Donat un trumfo (0 a 3) codificar-lo amb un one-hot de 4 elements
 def one_hot_encode_trumfo(trumfo: int) -> list:
@@ -14,6 +15,15 @@ def one_hot_encode_hand(cartes: list) -> list:
         index = carta.pal * 12 + (carta.numero - 1)  # Càlcul de l'índex basat en pal i número
         encoding[index] = 1
     return encoding
+
+def one_hot_decode_hand(one_hot: List[float]) -> List[Carta]:
+    cartes = []
+    for index, value in enumerate(one_hot):
+        if value == 1:
+            pal = index // 12
+            numero = (index % 12) + 1
+            cartes.append(Carta(pal, numero))
+    return cartes
 
 # Donada una carta codificada amb un onehot de 48 elements, retornar la carta corresponent
 def decode_one_hot_card(encoding: list) -> Carta:

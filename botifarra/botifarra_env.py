@@ -24,18 +24,23 @@ class BotifarraEnv(Env, Botifarra):
         self.taula = []
         self.historic_mans = np.zeros((4, 48), dtype=int)  # Històric de cartes jugades i pals fallats per cada jugador
 
-    def reset(self):
+    def reset_partida(self):
         self.jugades_fetes = 0
         self.punts_equip_a = 0
         self.punts_equip_b = 0
         self.taula = []
-        info = {}
         self.jugador_actual = (self.jugador_inicial + 1) % 4 # El jugador que comença jugant és el de després del que ha cantat
-        info['proxim_jugador'] = self.jugador_actual + 1
-
+        
         # Repartir cartes
         self.repartir_cartes()
-        
+    
+    
+    def reset(self):
+        # reset partida
+        self.reset_partida()
+        info = {}
+        info['proxim_jugador'] = self.jugador_actual + 1
+
         # Cantar 
         info['canta'] = self.jugador_inicial + 1
         self.trumfo = self.cantar_trumfo(self.jugador_inicial)
@@ -68,7 +73,7 @@ class BotifarraEnv(Env, Botifarra):
             self.historic_mans[(self.jugador_actual + i) % 4, action] = -1
 
         if len(self.taula) == 4: # S'ha completat una jugada
-            idx_guanyador = self.__carta_guanyadora__(self.trumfo, self.taula)
+            idx_guanyador = self.carta_guanyadora(self.trumfo, self.taula)
             guanyador = (self.jugador_actual + 1 + idx_guanyador) % 4
             punts_jugada = sum(carta.get_punts() for carta in self.taula) + 1 # + 1 punt per cada jugada
             info['guanyador'] = guanyador + 1

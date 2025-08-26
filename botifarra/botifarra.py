@@ -12,7 +12,7 @@ class Botifarra:
         self.punts_equip_b = 0
         self.pals = {0: 'Oros', 1: 'Copes', 2: 'Espases', 3: 'Bastos', 4: 'Botifarra'}
 
-    def __carta_guanyadora__(self, trumfo: int, taula: list) -> int:
+    def carta_guanyadora(self, trumfo: int, taula: list) -> int:
         """
         Retorna l'índex (0..3) de la carta guanyadora de la taula.
         """
@@ -34,7 +34,7 @@ class Botifarra:
             taula.append(carta)
           
         # Determinar qui guanya la jugada
-        idx_guanyador = self.__carta_guanyadora__(trumfo, taula)
+        idx_guanyador = self.carta_guanyadora(trumfo, taula)
         guanyador = (jugador_inicial + idx_guanyador) % 4
         punts_jugada = sum(carta.get_punts() for carta in taula) + 1 # + 1 punt per cada jugada
        
@@ -47,6 +47,7 @@ class Botifarra:
         baralla.barreja()
         for i in range(4):
             self.jugadors[i].ma = baralla.reparteix(12)
+            self.jugadors[i].ordenar_ma()
             # print(f"{self.jugadors[i]}")
     
     def cantar_trumfo(self, jugador_inicial: int) -> int:

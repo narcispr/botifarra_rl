@@ -7,11 +7,11 @@ import numpy as np
 
 NUMERO_PARTIDES = 100
 PESOS_EQUIP_A = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_10k_dqn"
-PESOS_EQUIP_B = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_50k_dqn"
+PESOS_EQUIP_B = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_65k_dqn"
 
 agent_A = DQNBotifarra(hidden_layers=[128, 128])
 agent_A.load_weights(PESOS_EQUIP_A)
-agent_B = DQNBotifarra(hidden_layers=[512, 256])
+agent_B = DQNBotifarra(hidden_layers=[256, 128])
 agent_B.load_weights(PESOS_EQUIP_B)
 env = BotifarraEnv()
 

@@ -13,6 +13,13 @@ class Carta:
         # 1 (as)=11, 3=10, 12 (rei)=4, 11 (cavall)=3, 10 (sota)=2, resta=0
         self.punts = {1: 4, 9: 5, 10: 1, 11: 2, 12: 3}.get(numero, 0)
         self.valor = {2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 10: 8, 11: 9, 12: 10, 1: 11, 9: 12}.get(numero, 0)
+        
+        # Per poder ordenar facilment les cartes
+        self.ordre = pal * 15 + (numero - 1)
+        if self.numero == 1:  # As
+            self.ordre += 12
+        elif self.numero == 9:  # Manilla
+            self.ordre += 5
 
     def __repr__(self):
         return f"{self.numero}{self.nom_pal}"
