@@ -46,3 +46,6 @@ class Carta:
         if self.pal == trumfo:
             bonus += 24
         return self.valor + bonus
+    
+    def idx(self):
+        return self.pal * 12 + (self.numero - 1)

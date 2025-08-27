@@ -1,5 +1,6 @@
 from botifarra.jugador import Jugador
 from botifarra.baralla import Baralla
+from botifarra.pals import BOTIFARRA
 
 class Botifarra:
     """
@@ -10,7 +11,22 @@ class Botifarra:
         self.jugadors: list[Jugador] = [Jugador(i) for i in range(4)]
         self.punts_equip_a = 0
         self.punts_equip_b = 0
+        self.jugador_inicial = 0  
+        self.jugador_actual = 1 # El jugador que comença jugant és el de després del que ha cantat
+        self.jugades_fetes = 0
+        self.trumfo = BOTIFARRA
+        self.taula = []
         self.pals = {0: 'Oros', 1: 'Copes', 2: 'Espases', 3: 'Bastos', 4: 'Botifarra'}
+
+    def reset_partida(self):
+        self.jugades_fetes = 0
+        self.punts_equip_a = 0
+        self.punts_equip_b = 0
+        self.taula = []
+        self.jugador_actual = (self.jugador_inicial + 1) % 4 # El jugador que comença jugant és el de després del que ha cantat
+        
+        # Repartir cartes
+        self.repartir_cartes()
 
     def carta_guanyadora(self, trumfo: int, taula: list) -> int:
         """
@@ -60,7 +76,9 @@ class Botifarra:
         else:
             # print(f"El jugador {jugador_inicial + 1} canta el pal {self.pals[trumfo]}.")
             pass
-        
+
+        # Avançar el jugador inicial per la següent mà
+        self.jugador_inicial = (self.jugador_inicial + 1) % 4
         return trumfo
     
     def jugar_ma(self, jugador_inicial: int):

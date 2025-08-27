@@ -8,6 +8,14 @@ def one_hot_encode_trumfo(trumfo: int) -> list:
         encoding[trumfo] = 1
     return encoding
 
+def one_hot_encode_trumfo_v2(trumfo: int) -> list:
+   # codifica les 48 cartes marcant les 12  que son trumfo amb 0. si botifarra llavors retorma 48 zeros
+    encoding = [0] * 48  # Suposant 48 cartes
+    if 0 <= trumfo < 4:
+        for i in range(12 * trumfo, 12 * trumfo + 12):
+            encoding[i] = 1
+    return encoding
+
 # Donada una llista de cartes codificarles amb ub hotbit (suposant 48 cartes, 1 si la carta esta a la llista 0 si no)
 def one_hot_encode_hand(cartes: list) -> list:
     encoding = [0] * 48  # Suposant una baralla de 48 cartes
@@ -24,6 +32,12 @@ def one_hot_decode_hand(one_hot: List[float]) -> List[Carta]:
             numero = (index % 12) + 1
             cartes.append(Carta(pal, numero))
     return cartes
+
+def one_hot_encode_card(carta: Carta) -> list:
+    encoding = [0] * 48  # Suposant una baralla de 48 cartes
+    index = carta.pal * 12 + (carta.numero - 1)  # Càlcul de l'índex basat en pal i número
+    encoding[index] = 1
+    return encoding
 
 # Donada una carta codificada amb un onehot de 48 elements, retornar la carta corresponent
 def decode_one_hot_card(encoding: list) -> Carta:

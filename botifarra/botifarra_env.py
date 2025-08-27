@@ -1,6 +1,8 @@
 from botifarra.botifarra import Botifarra
+from botifarra.carta import Carta
 from botifarra.rl_utils import encode_estat, decode_action_card, one_hot_encode_hand
 from botifarra.pals import BOTIFARRA
+
 from gymnasium import Env, spaces
 import numpy as np
 
@@ -15,26 +17,8 @@ class BotifarraEnv(Env, Botifarra):
         self.action_space = spaces.Discrete(48)
         # Observation space can be defined based on the game state representation
         self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(390,), dtype=np.float32)
-        self.jugador_inicial = 0  
-        self.jugador_actual = 1 # El jugador que comença jugant és el de després del que ha cantat
-        self.jugades_fetes = 0
-        self.punts_equip_a = 0
-        self.punts_equip_b = 0
-        self.trumfo = BOTIFARRA
-        self.taula = []
         self.historic_mans = np.zeros((4, 48), dtype=int)  # Històric de cartes jugades i pals fallats per cada jugador
 
-    def reset_partida(self):
-        self.jugades_fetes = 0
-        self.punts_equip_a = 0
-        self.punts_equip_b = 0
-        self.taula = []
-        self.jugador_actual = (self.jugador_inicial + 1) % 4 # El jugador que comença jugant és el de després del que ha cantat
-        
-        # Repartir cartes
-        self.repartir_cartes()
-    
-    
     def reset(self):
         # reset partida
         self.reset_partida()
@@ -44,11 +28,11 @@ class BotifarraEnv(Env, Botifarra):
         # Cantar 
         info['canta'] = self.jugador_inicial + 1
         self.trumfo = self.cantar_trumfo(self.jugador_inicial)
-        self.jugador_inicial = (self.jugador_inicial + 1) % 4
+        info['trumfo'] = self.trumfo
 
+        # Omple la màscara d'accions vàlides i el primer estat
         ma_valida, _, _ = self.jugadors[self.jugador_actual].cartes_valides(self.trumfo, self.taula)
         info['mask'] = one_hot_encode_hand(ma_valida)  # Màscara d'accions vàlides per al següent estat
-
         state = self.get_state(self.jugador_actual)
         
         return state, info
@@ -56,36 +40,41 @@ class BotifarraEnv(Env, Botifarra):
     def step(self, action):
         # Aquí es on implementaries la lògica per processar l'acció
         # i avançar el joc. Aquesta és una simplificació.
+        info = {}
         reward = 0
         done = False
         terminated = False
-        info = {}
         carta_jugada = decode_action_card(action)
-        self.taula.append(carta_jugada)
         info['jugada'] = self.jugades_fetes + 1
         info['carta_jugada'] = carta_jugada
-        # true la carta de la mà del jugador
+        
+        # Treu la carta de la mà del jugador i la posa a la taula
         self.jugadors[self.jugador_actual].ma.remove(carta_jugada)
-
-        # Actualitzem l'històric de jugades amb la carta jugada
-        self.historic_mans[self.jugador_actual, action] = 1
-        for i in range(1, 4):
-            self.historic_mans[(self.jugador_actual + i) % 4, action] = -1
+        self.taula.append(carta_jugada)
+        
+        # Guardem últim jugador que ha jugat per actualitzar esatat després
+        ultim_jugador = self.jugador_actual
 
         if len(self.taula) == 4: # S'ha completat una jugada
+            # Busquem guanyador de la base
             idx_guanyador = self.carta_guanyadora(self.trumfo, self.taula)
             guanyador = (self.jugador_actual + 1 + idx_guanyador) % 4
             punts_jugada = sum(carta.get_punts() for carta in self.taula) + 1 # + 1 punt per cada jugada
-            info['guanyador'] = guanyador + 1
-            info['punts_jugada'] = punts_jugada
             reward = punts_jugada                                         # Si el reward és positu és que ha guanyat l'equip A
+            # Re-iniciem la taula i actualitzem el jugador actual
             self.taula = []
             self.jugador_actual = guanyador
             self.jugades_fetes += 1
+            # Omplim informació
+            info['guanyador'] = guanyador + 1
+            info['punts_jugada'] = punts_jugada
+            # info['mask'] = one_hot_encode_hand(self.jugadors[self.jugador_actual].ma)  # Màscara d'accions vàlides per la següent mà
+            # Actualitzem puntuació mà
             if guanyador % 2 == 0:
                 self.punts_equip_a += punts_jugada
             else:
                 self.punts_equip_b += punts_jugada
+            # Si última mà, actualitzem puntuació equips i finalitzem episodi
             if self.jugades_fetes == 12:
                 # S'ha completat la mà
                 if self.punts_equip_a > self.punts_equip_b:
@@ -95,27 +84,40 @@ class BotifarraEnv(Env, Botifarra):
                     info['punts_equip_a'] = 0
                     info['punts_equip_b'] = self.punts_equip_b - 36
                 done = True
-            info['mask'] = one_hot_encode_hand(self.jugadors[self.jugador_actual].ma)  # Màscara d'accions vàlides per la següent mà
-
         else:
             # ... canviem al següent jugador
             self.jugador_actual = (self.jugador_actual + 1) % 4
         
-            ma_valida, falla_pal, falla_trumfo = self.jugadors[self.jugador_actual].cartes_valides(self.trumfo, self.taula)
-            # ... i actualitzem l'històric de jugades amb els pals/trumfos fallats si n'hi ha
-            if falla_pal:
-                for i in range(12 * self.taula[0].pal, 12 * self.taula[0].pal + 12):
-                    if self.historic_mans[self.jugador_actual, i] == 0:
-                        self.historic_mans[self.jugador_actual, i] = -1
-            if falla_trumfo and self.trumfo != BOTIFARRA:
-                for i in range(12 * self.trumfo, 12 * self.trumfo + 12):
-                    if self.historic_mans[self.jugador_actual, i] == 0:
-                        self.historic_mans[self.jugador_actual, i] = -1
-            info['mask'] = one_hot_encode_hand(ma_valida)  # Màscara d'accions vàlides per al següent estat
-    
-        info['proxim_jugador'] = self.jugador_actual + 1
+        info['proxim_jugador'] = self.jugador_actual + 1 # depen de mi mitja base o final de base
+        
+        # Actualitzem informació ma vàlida
+        ma_valida, _, _ = self.jugadors[self.jugador_actual].cartes_valides(self.trumfo, self.taula)
+        info['mask'] = one_hot_encode_hand(ma_valida)  # Màscara d'accions vàlides per al següent estat
+        
+        # Actualitzem l'estat del joc, la màscara d'accions vàlides i agafem el nou estat
+        # IMPORTANT! En cas de voler canviar les observacions només cal sobreescriure aquestes 2 funcions!
+        self.update_state(ultim_jugador, action, self.jugador_actual)
         state = self.get_state(self.jugador_actual)
+
         return state, reward, done, terminated, info
+
+    def update_state(self, ultim_jugador: int, action: int, proxim_jugador: int):
+        # Actualitza l'estat del joc després que un jugador hagi jugat una carta
+        self.historic_mans[ultim_jugador, action] = 1
+        for i in range(1, 4):
+            self.historic_mans[(ultim_jugador + i) % 4, action] = -1
+        
+        # Actualizem estat amb fallos de pal/trumfo si n'hi ha
+        _, falla_pal, falla_trumfo = self.jugadors[proxim_jugador].cartes_valides(self.trumfo, self.taula)
+        # ... i actualitzem l'històric de jugades amb els pals/trumfos fallats si n'hi ha
+        if falla_pal:
+            for i in range(12 * self.taula[0].pal, 12 * self.taula[0].pal + 12):
+                if self.historic_mans[proxim_jugador, i] == 0:
+                    self.historic_mans[proxim_jugador, i] = -1
+        if falla_trumfo and self.trumfo != BOTIFARRA:
+            for i in range(12 * self.trumfo, 12 * self.trumfo + 12):
+                if self.historic_mans[proxim_jugador, i] == 0:
+                    self.historic_mans[proxim_jugador, i] = -1
 
     def get_state(self, id_jugador: int):
         # Retorna l'estat actual del joc com un diccionari o una altra estructura de dades
