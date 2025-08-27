@@ -1,8 +1,10 @@
 from botifarra.botifarra_env import BotifarraEnv
+from botifarra.botifarra_env_v2 import BotifarraEnvV2
+
 from botifarra.dqn_botifarra import DQNBotifarra
 
-agent = DQNBotifarra(batch_size=128)
+agent = DQNBotifarra()
 
-env = BotifarraEnv()
-agent.training(env, 100000)
-agent.save_weights("./botifarra_100k_dqn")
+env = BotifarraEnvV2()
+agent.training(env, 10000)
+agent.save_weights("./botifarra_v2_10k_dqn")

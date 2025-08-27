@@ -6,13 +6,13 @@ from botifarra.dqn_botifarra import DQNBotifarra
 import numpy as np
 
 NUMERO_PARTIDES = 100
-PESOS_EQUIP_A = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_10k_dqn"
-PESOS_EQUIP_B = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_65k_dqn"
+PESOS_1 = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_10k_dqn"
+PESOS_2 = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_200k_dqn_256x128"
 
 agent_A = DQNBotifarra(hidden_layers=[128, 128])
-agent_A.load_weights(PESOS_EQUIP_A)
+agent_A.load_weights(PESOS_1)
 agent_B = DQNBotifarra(hidden_layers=[256, 128])
-agent_B.load_weights(PESOS_EQUIP_B)
+agent_B.load_weights(PESOS_2)
 env = BotifarraEnv()
 
 victories_a = 0
