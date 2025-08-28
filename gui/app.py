@@ -2,8 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Callable, Set, Tuple, Optional
 from nicegui import ui, app
-import random
-from botifarra.botifarra_env import BotifarraEnv
+from botifarra.botifarra_env_v2 import BotifarraEnvV2
 from botifarra.rl_utils import code_card, decode_action_card, one_hot_encode_hand
 from botifarra.pals import BOTIFARRA
 from botifarra.dqn_botifarra import DQNBotifarra
@@ -27,15 +26,18 @@ class Game:
     players: Dict[int, List[int]] = field(default_factory=lambda: {s: [] for s in range(4)})
     table: List[Tuple[int, int]] = field(default_factory=list)  # (seat, card)
     team_points: Dict[str, int] = field(default_factory=lambda: {'A': 0, 'B': 0})
-    turn: int = -1                   # jugador actiu, -1 ningú
-    canta: int = 0                   # jugador que canta (1..4)
+    turn: int = -1                   # jugador actiu (0...3), -1 ningú (estem cantant!)
+    canta: int = 0                   # jugador que canta (0..3)
+    cantant: bool = True            # estem en fase de cantar trumfo    
+    delegats: bool = False         # si el jugador que canta ha delegat
     log: List[str] = field(default_factory=list)
     subscribers: Set[Callable[[], None]] = field(default_factory=set)  # redibuix de cada vista
-    joc: BotifarraEnv = BotifarraEnv()
-    agent_IA: DQNBotifarra = DQNBotifarra(hidden_layers=[128, 128])
+    joc: BotifarraEnvV2 = BotifarraEnvV2()
+    agent_IA: DQNBotifarra = DQNBotifarra()
     last_obs: Optional[List[float]] = None
     last_mask: Optional[List[int]] = None
-    
+    wait: int = 0
+
     def broadcast(self):
         """Re-pinta totes les vistes d'aquesta partida."""
         for fn in list(self.subscribers):
@@ -46,17 +48,41 @@ class Game:
                 self.subscribers.discard(fn)
 
     # ---------- joc ----------
-    
+    def canta_IA(self):
+        self.joc.trumfo = self.joc.jugadors[self.canta].cantar()    
+        if self.joc.trumfo >= 0:
+            self.log.append(f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}')
+        else:
+            self.joc.trumfo = self.joc.jugadors[(self.canta + 2) % 4].cantar(delegat=True)
+            self.log.append(f'El jugador {SEAT_NAME[(self.canta + 2) % 4]} canta {self.joc.pals[self.joc.trumfo]} delegats')
+            
     def set_trumfo(self, t_id):
-        self.joc.trumfo = t_id
-        self.log = [f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}']
-        self.turn = (self.canta + 1) % 4  # el jugador
-        self.canta = -1  # ja ha cantat
-        self.broadcast()
+        if t_id == 5:
+            # delega ....
+            self.delegats = True
+            self.log.append(f'El jugador {SEAT_NAME[self.canta]} delega...')   
+            self.canta = (self.canta + 2) % 4
+             
+        else:
+            self.joc.trumfo = t_id
+            self.log.append(f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}')
+            if self.delegats:
+                self.joc.jugador_actual = (self.canta - 1) % 4  # el jugador
+                self.canta = (self.canta - 1) % 4  # pòxim jugador a cantar
+            else:
+                self.joc.jugador_actual = (self.canta + 1) % 4
+                self.canta = (self.canta + 1) % 4  # pòxim jugador a cantar
+            
+            # Agafa observació i mask per agent_IA
+            self.last_obs = self.joc.get_state(self.joc.jugador_actual)
+            self.last_mask = one_hot_encode_hand(self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0])
+
+            self.cantant = False
+            self.broadcast()
         
     def new_deal(self):
         # Load IA weights
-        self.agent_IA.load_weights("/home/narcis/catkin_ws/src/botifarra/agents/botifarra_10k_dqn")
+        self.agent_IA.load_weights("/home/narcis/catkin_ws/src/botifarra/agents/botifarra_v2_200k_dqn")
                                    
         # Repartir cartes
         self.joc.reset_joc()
@@ -68,25 +94,17 @@ class Game:
                 self.players[s].append(code_card(c))
 
         self.table.clear()
-        print("canta: ", self.canta)
-        self.log = [f'Nova mà repartida canta el jugador {SEAT_NAME[self.canta]}']
+        self.log.append(f'Nova mà repartida canta el jugador {SEAT_NAME[self.canta]}')
         self.broadcast()
         
         # Cantar trumfo
-        if PLAYER_MODE[self.canta] == 'IA':
-            self.joc.trumfo = self.joc.jugadors[self.canta].cantar()
-            if self.joc.trumfo >= 0:
-                self.log = [f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}']
-            else:
-                self.joc.trumfo = self.joc.jugadors[(self.canta + 2) % 4].cantar(delegat=True)
-                self.log = [f'El jugador {SEAT_NAME[(self.canta + 2) % 4]} canta {self.joc.pals[self.joc.trumfo]} delegats']
+        self.cantant = True
+        self.delegats = False
         
-        # Agafa observació i mask per agent_IA
-        self.last_obs = self.joc.get_state(self.joc.jugador_actual)
-        self.last_mask = one_hot_encode_hand(self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0])
 
     def play_card(self, seat: int, card: int):
-        if seat != self.turn:
+        
+        if seat != self.joc.jugador_actual:
             return
         if card not in self.players[seat]:
             return
@@ -119,7 +137,6 @@ class Game:
         # quan hi ha 4 cartes a taula, simulem "tancar la basa"
         if len(self.table) < 4:
             # passa el torn al següent
-            self.turn = (self.turn + 1) % 4
             self.joc.jugador_actual = (self.joc.jugador_actual + 1) % 4
         
             ma_valida, falla_pal, falla_trumfo = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)
@@ -169,7 +186,8 @@ def player_box(name: str, active: bool):
 def game_page(room: str, seat: int):
     assert seat in range(4), 'Seat must be one of 1..4'
     g = get_game(room)
-
+    wait = 0  # per esperar un cicle després de posar la 4a carta
+    
     # ---------- elements (referències) ----------
     title = ui.label().classes('text-2xl font-bold')
     score = ui.label().classes('text-lg')
@@ -181,7 +199,7 @@ def game_page(room: str, seat: int):
 
     canta_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
     table_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
-    action_log = ui.label().classes('italic text-slate-600 my-2')
+    action_log = ui.label().classes('italic text-slate-600 my-2 text-lg')
 
     hand_row = ui.row().classes('gap-2 my-4')   # mà privada
 
@@ -197,7 +215,7 @@ def game_page(room: str, seat: int):
         top_row.clear()
         with top_row:
             for s in range(4):
-                player_box(SEAT_NAME[s], active=(g.turn == s))
+                player_box(SEAT_NAME[s], active=(g.joc.jugador_actual == s))
 
         # trumfo (pal de partida)
         img_trumfo = g.joc.trumfo * 12 if g.joc.trumfo != -1 else 50
@@ -209,7 +227,8 @@ def game_page(room: str, seat: int):
         canta_row.clear()
         if g.canta == seat:
             with canta_row:
-                for c in range(5):
+                v = 6 if not g.delegats else 5
+                for c in range(v):
                     with ui.column().classes('items-center'):
                         img = ui.image(card_img_src(c * 12)).classes(
                             'cursor-pointer hover:scale-105 transition'
@@ -235,10 +254,7 @@ def game_page(room: str, seat: int):
                 img.on('click', lambda e, card_id=cid: g.play_card(seat, card_id))
 
         # Log curt i torn
-        if g.turn == -1:
-            action_log.set_text(f'Esperant que {SEAT_NAME[g.canta]} canti el trumfo...')
-        else:
-            action_log.set_text(' · '.join(g.log[-3:]) + f'   | Torn: {SEAT_NAME[g.turn]}')
+        action_log.set_text(''.join(g.log[-1:]) + (f'   | Torn: {SEAT_NAME[g.joc.jugador_actual]}' if not g.cantant else ''))
 
     # Subscriu aquesta vista i des-subscriu al desconnectar del client
     g.subscribers.add(redraw)  # el client ja està connectat en entrar a la pàgina
@@ -249,27 +265,72 @@ def game_page(room: str, seat: int):
 
     # Timer per client
     def client_timer_callback():
-        if g.turn == seat and PLAYER_MODE[seat] == 'IA':
-            # action = g.agent_IA.choose_action(g.last_obs, np.array(g.last_mask), deterministic=True)
-            print("La IA ha de trir la carta a jugar!")
-            card = g.agent_IA.choose_action(g.last_obs, np.array(g.last_mask), deterministic=True)
-            g.play_card(seat, card)
+        if seat != 0:
+            redraw()
+            return  # només el client 0 controla la lògica del joc
+        
+        # ------------------ CANTEM EL TRUMFO ------------------
+        if g.cantant and (PLAYER_MODE[g.canta] == 'IA'): # canta IA
+             # Wait 1 cilcle 
+            if g.wait == 0:
+                g.wait = 1
+                redraw()
+                return
+            g.wait = 0
 
-        if len(g.table) == 4 and g.turn == seat:
-            print(f"Check winner from seat {seat}")
-            print(g.joc.taula)
+            trumfo = g.joc.jugadors[g.canta].cantar(delegat=g.delegats)
+            if g.joc.trumfo >= 0:
+                g.log.append(f'El jugador {SEAT_NAME[g.canta]} canta {g.joc.pals[g.joc.trumfo]}')
+                g.joc.trumfo = trumfo
+                g.cantant = False
+                if g.delegats:
+                    g.joc.jugador_actual = (g.canta - 1) % 4  # el jugador
+                    g.canta = (g.canta - 1) % 4  # pòxim jugador a cantar
+                else:
+                    g.joc.jugador_actual = (g.canta + 1) % 4
+                    g.canta = (g.canta + 1) % 4  # pòxim jugador a cantar
+                    
+                # Preparem per 1a jugada
+                # Agafa observació i mask per agent_IA
+                g.last_obs = g.joc.get_state(g.joc.jugador_actual)
+                g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula)[0])
+
+            else: # la IA ha delegat
+                g.delegats = True
+                g.log.append(f'El jugador {SEAT_NAME[g.canta]} delega...')
+                g.canta = (g.canta + 2) % 4
+
+        # ------------------ JUGAR CARTA LA IA ------------------  
+        if (not g.cantant) and (PLAYER_MODE[g.joc.jugador_actual] == 'IA'):
+            # if g.wait == 0:
+            #     g.wait = 1
+            #     redraw()
+            #     return
+            # g.wait = 0
+
+            # action = g.agent_IA.choose_action(g.last_obs, np.array(g.last_mask), deterministic=True)
+            card = g.agent_IA.choose_action(np.array(g.last_obs), np.array(g.last_mask), deterministic=True)
+            g.play_card(g.joc.jugador_actual, card)
+
+        # ------------------ COMPROVEM JUANYADOR DE BASE ------------------
+        if len(g.table) == 4:
+            # Wait 1 cilcle 
+            if g.wait == 0:
+                g.wait = 1
+                redraw()
+                return
+            g.wait = 0
 
             idx = g.joc.carta_guanyadora(g.joc.trumfo, g.joc.taula)
             guanyador = g.table[idx][0]
             punts_jugada = sum(carta.get_punts() for carta in g.joc.taula) + 1 # + 1 punt per cada jugada
-            print(f'Guanya {SEAT_NAME[guanyador]} i fa {punts_jugada} punts.')
-
+          
             g.log.append(f'Guanya {SEAT_NAME[guanyador]} i fa {punts_jugada} punts.')
             if guanyador % 2 == 0:
                 g.team_points['A'] += punts_jugada
             else:
                 g.team_points['B'] += punts_jugada
-            g.turn = guanyador
+
             g.joc.jugador_actual = guanyador
             g.table.clear()
             g.joc.taula.clear()
@@ -277,11 +338,9 @@ def game_page(room: str, seat: int):
             # Agafa observació i mask per agent_IA
             g.last_obs = g.joc.get_state(g.joc.jugador_actual)
             g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula)[0])
-
-            # g.broadcast()
             redraw()
     
-    ui.timer(3.0, client_timer_callback, active=True)
+    ui.timer(2.0, client_timer_callback, active=True)
 
 # --------------------------- ARRANCA -------------------------------
 
