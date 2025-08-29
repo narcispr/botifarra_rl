@@ -28,17 +28,17 @@ class Jugador:
         espases = self.__cartes_pal__(ESPASES)
         bastos = self.__cartes_pal__(BASTOS)
         # Si tenim 5 o més cartes d'algun pal, el cantem (no mirem el semi-fallo....)
-        if len(oros) >= 5:
+        if (len(oros) >= 5) and (min(len(copes), len(espases), len(bastos)) <= 1):
             return OROS
-        elif len(copes) >= 5:
+        elif (len(copes) >= 5) and (min(len(oros), len(espases), len(bastos)) <= 1):
             return COPES
-        elif len(espases) >= 5:
+        elif (len(espases) >= 5) and (min(len(copes), len(oros), len(bastos)) <= 1):
             return ESPASES
-        elif len(bastos) >= 5:
+        elif (len(bastos) >= 5) and (min(len(copes), len(espases), len(oros)) <= 1):
             return BASTOS
         
         # Si tenim molts trumfos cantem botifarra
-        if sum(carta.get_punts() for carta in self.ma) >= 24:
+        if sum(carta.get_punts() for carta in self.ma) >= 20:
             return BOTIFARRA
         
         # Si no podem cantar però podem delegar, deleguem

@@ -1,3 +1,3 @@
 gymnasium
 numpy
-learning_lib
+nicegui

@@ -20,23 +20,29 @@ app.add_static_files('/static', 'static')  # espera ./static/cards/NN.png
 SEAT_NAME = {0: 'J1', 1: 'J2', 2: 'J3', 3: 'J4'}
 PLAYER_MODE = {0: 'huma', 1: 'IA', 2: 'IA', 3: 'IA'}
 
-@dataclass
 class Game:
-    room: str
-    players: Dict[int, List[int]] = field(default_factory=lambda: {s: [] for s in range(4)})
-    table: List[Tuple[int, int]] = field(default_factory=list)  # (seat, card)
-    team_points: Dict[str, int] = field(default_factory=lambda: {'A': 0, 'B': 0})
-    turn: int = -1                   # jugador actiu (0...3), -1 ningú (estem cantant!)
-    canta: int = 0                   # jugador que canta (0..3)
-    cantant: bool = True            # estem en fase de cantar trumfo    
-    delegats: bool = False         # si el jugador que canta ha delegat
-    log: List[str] = field(default_factory=list)
-    subscribers: Set[Callable[[], None]] = field(default_factory=set)  # redibuix de cada vista
-    joc: BotifarraEnvV2 = BotifarraEnvV2()
-    agent_IA: DQNBotifarra = DQNBotifarra()
-    last_obs: Optional[List[float]] = None
-    last_mask: Optional[List[int]] = None
-    wait: int = 0
+    def __init__(self, room: str):
+        self.room = room
+        self.players = {s: [] for s in range(4)}
+        self.table = []  # (seat, card)
+        self.team_points = {'A': 0, 'B': 0}
+        self.total_points = {'A': 0, 'B': 0}
+        self.turn = -1  # jugador actiu (0...3), -1 ningú (estem cantant!)
+        self.canta = 2  # jugador que canta (0..3)
+        self.cantant = True  # estem en fase de cantar trumfo
+        self.delegats = False  # si el jugador que canta ha delegat
+        self.log = []
+        self.subscribers = set()  # redibuix de cada vista
+        self.joc = BotifarraEnvV2()
+        self.agent_IA = DQNBotifarra()
+        self.last_obs = None
+        self.last_mask = None
+        self.wait = 0
+        self.punts_partida = 50
+        self.last_redraw = time.time()
+
+        # Load IA weights
+        self.agent_IA.load_weights("/home/narcis/catkin_ws/src/botifarra/agents/botifarra_v2_200k_dqn")
 
     def broadcast(self):
         """Re-pinta totes les vistes d'aquesta partida."""
@@ -48,42 +54,36 @@ class Game:
                 self.subscribers.discard(fn)
 
     # ---------- joc ----------
-    def canta_IA(self):
-        self.joc.trumfo = self.joc.jugadors[self.canta].cantar()    
-        if self.joc.trumfo >= 0:
-            self.log.append(f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}')
-        else:
-            self.joc.trumfo = self.joc.jugadors[(self.canta + 2) % 4].cantar(delegat=True)
-            self.log.append(f'El jugador {SEAT_NAME[(self.canta + 2) % 4]} canta {self.joc.pals[self.joc.trumfo]} delegats')
-            
     def set_trumfo(self, t_id):
+        # el jugador humà ha delegat
         if t_id == 5:
             # delega ....
             self.delegats = True
-            self.log.append(f'El jugador {SEAT_NAME[self.canta]} delega...')   
+            self.log.append(f'El jugador {SEAT_NAME[self.canta]} delega...')
             self.canta = (self.canta + 2) % 4
-             
+        # El jugador humà a cantat trumfo
         else:
             self.joc.trumfo = t_id
             self.log.append(f'El jugador {SEAT_NAME[self.canta]} canta {self.joc.pals[self.joc.trumfo]}')
+            
             if self.delegats:
                 self.joc.jugador_actual = (self.canta - 1) % 4  # el jugador
                 self.canta = (self.canta - 1) % 4  # pòxim jugador a cantar
             else:
                 self.joc.jugador_actual = (self.canta + 1) % 4
                 self.canta = (self.canta + 1) % 4  # pòxim jugador a cantar
-            
+
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
-            self.last_mask = one_hot_encode_hand(self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0])
+            self.last_mask = one_hot_encode_hand(
+                self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+            )
 
             self.cantant = False
             self.broadcast()
-        
+
+    # Juguem nova mà
     def new_deal(self):
-        # Load IA weights
-        self.agent_IA.load_weights("/home/narcis/catkin_ws/src/botifarra/agents/botifarra_v2_200k_dqn")
-                                   
         # Repartir cartes
         self.joc.reset_joc()
         self.joc.repartir_cartes()
@@ -96,21 +96,20 @@ class Game:
         self.table.clear()
         self.log.append(f'Nova mà repartida canta el jugador {SEAT_NAME[self.canta]}')
         self.broadcast()
-        
+
         # Cantar trumfo
         self.cantant = True
         self.delegats = False
-        
 
+    # Juguem una carta
     def play_card(self, seat: int, card: int):
-        
         if seat != self.joc.jugador_actual:
             return
         if card not in self.players[seat]:
             return
         if len(self.table) >= 4:
             return
-        
+
         # Mira cartes vàlides pel jugador
         ma_valida = self.joc.jugadors[seat].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
         carta_jugada = decode_action_card(card)
@@ -118,7 +117,7 @@ class Game:
             self.log.append(f'{SEAT_NAME[seat]}, no pots jugar aquesta carta!')
             self.broadcast()
             return
-        
+
         # Actualitza l'estat del joc
         self.joc.taula.append(carta_jugada)
         # treu la carta de la mà del jugador
@@ -128,18 +127,20 @@ class Game:
         self.joc.historic_mans[seat, card] = 1
         for i in range(1, 4):
             self.joc.historic_mans[(seat + i) % 4, card] = -1
-        
+
         # Eliminem carta de la visualització i de l'engine i l'afegim a la taula
         self.players[seat].remove(card)
         self.table.append((seat, card))
         self.log.append(f'{SEAT_NAME[seat]} juga {decode_action_card(card)}')
-        
+
         # quan hi ha 4 cartes a taula, simulem "tancar la basa"
         if len(self.table) < 4:
             # passa el torn al següent
             self.joc.jugador_actual = (self.joc.jugador_actual + 1) % 4
-        
-            ma_valida, falla_pal, falla_trumfo = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)
+
+            ma_valida, falla_pal, falla_trumfo = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(
+                self.joc.trumfo, self.joc.taula
+            )
             # ... i actualitzem l'històric de jugades amb els pals/trumfos fallats si n'hi ha
             if falla_pal:
                 for i in range(12 * self.joc.taula[0].pal, 12 * self.joc.taula[0].pal + 12):
@@ -151,7 +152,9 @@ class Game:
                         self.joc.historic_mans[self.joc.jugador_actual, i] = -1
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
-            self.last_mask = one_hot_encode_hand(self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0])
+            self.last_mask = one_hot_encode_hand(
+                self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+            )
 
         self.broadcast()
 
@@ -167,8 +170,8 @@ def get_game(room: str) -> Game:
 
 # --------------------------- UTILITATS UI ---------------------------
 
-CARD_W_TABLE = 90   # px
-CARD_W_HAND = 70    # px
+CARD_W_TABLE = 120   # px
+CARD_W_HAND = 95    # px
 
 def card_img_src(card_id: int) -> str:
     return f'/static/cards/{card_id}.png'
@@ -186,16 +189,17 @@ def player_box(name: str, active: bool):
 def game_page(room: str, seat: int):
     assert seat in range(4), 'Seat must be one of 1..4'
     g = get_game(room)
-    wait = 0  # per esperar un cicle després de posar la 4a carta
     
     # ---------- elements (referències) ----------
     title = ui.label().classes('text-2xl font-bold')
+    score_total = ui.label().classes('text-xl')
     score = ui.label().classes('text-lg')
+
 
     with ui.row().classes('gap-4 items-center my-2'):
         top_row = ui.row().classes('gap-4')  # jugadors
         ui.row().style('width:20px;')  # Add gap between top_row and trumfo_card
-        trumfo_card = ui.image().classes('border-2 border-blue-600 rounded').style('width:80px;')
+        trumfo_card = ui.image().classes('border-2 border-blue-600 rounded').style('width:110px;')
 
     canta_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
     table_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
@@ -209,7 +213,9 @@ def game_page(room: str, seat: int):
     # ---------- funcions d’UI ----------
     def redraw():
         title.set_text(f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})')
-        score.set_text(f'Equip A: {g.team_points["A"]}  —  Equip B: {g.team_points["B"]}')
+        score_total.set_text(f'TOTAL:  {g.total_points["A"]} Equip A  —  {g.total_points["B"]} Equip B')
+        score.set_text(f'PARCIAL:  {g.team_points["A"]} Equip A  —  {g.team_points["B"]} Equip B')
+        g.last_redraw = time.time()
 
         # Fila jugadors (J1..J4) amb actiu resaltat
         top_row.clear()
@@ -225,7 +231,7 @@ def game_page(room: str, seat: int):
 
         # Canta UI
         canta_row.clear()
-        if g.canta == seat:
+        if g.canta == seat and g.cantant:
             with canta_row:
                 v = 6 if not g.delegats else 5
                 for c in range(v):
@@ -278,10 +284,9 @@ def game_page(room: str, seat: int):
                 return
             g.wait = 0
 
-            trumfo = g.joc.jugadors[g.canta].cantar(delegat=g.delegats)
+            g.joc.trumfo = g.joc.jugadors[g.canta].cantar(delegat=g.delegats)
             if g.joc.trumfo >= 0:
                 g.log.append(f'El jugador {SEAT_NAME[g.canta]} canta {g.joc.pals[g.joc.trumfo]}')
-                g.joc.trumfo = trumfo
                 g.cantant = False
                 if g.delegats:
                     g.joc.jugador_actual = (g.canta - 1) % 4  # el jugador
@@ -299,16 +304,13 @@ def game_page(room: str, seat: int):
                 g.delegats = True
                 g.log.append(f'El jugador {SEAT_NAME[g.canta]} delega...')
                 g.canta = (g.canta + 2) % 4
+        
+        if g.cantant and (PLAYER_MODE[g.canta] == 'huma'): # canta Huma
+            redraw() # Si el jugador humà ha de cantar (directe o delegat) no sempre es feia el redraw bé
+            return
 
         # ------------------ JUGAR CARTA LA IA ------------------  
         if (not g.cantant) and (PLAYER_MODE[g.joc.jugador_actual] == 'IA'):
-            # if g.wait == 0:
-            #     g.wait = 1
-            #     redraw()
-            #     return
-            # g.wait = 0
-
-            # action = g.agent_IA.choose_action(g.last_obs, np.array(g.last_mask), deterministic=True)
             card = g.agent_IA.choose_action(np.array(g.last_obs), np.array(g.last_mask), deterministic=True)
             g.play_card(g.joc.jugador_actual, card)
 
@@ -334,21 +336,48 @@ def game_page(room: str, seat: int):
             g.joc.jugador_actual = guanyador
             g.table.clear()
             g.joc.taula.clear()
+            g.joc.jugades_fetes += 1
 
             # Agafa observació i mask per agent_IA
             g.last_obs = g.joc.get_state(g.joc.jugador_actual)
             g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula)[0])
             redraw()
-    
+        # ------------------ FINAL MA ------------------
+        if g.joc.jugades_fetes >= 12:
+            if g.team_points['A'] > g.team_points['B']:
+                g.log.append(f'Guanya l\'equip A ({g.team_points["A"]} a {g.team_points["B"]})')
+                g.total_points['A'] += g.team_points["A"] - 36
+            elif g.team_points['B'] > g.team_points['A']:
+                g.log.append(f'Guanya l\'equip B ({g.team_points["B"]} a {g.team_points["A"]})')
+                g.total_points['B'] += g.team_points["B"] - 36
+            else:
+                g.log.append(f'Empat a {g.team_points["A"]}')
+            g.joc.jugades_fetes = 0
+
+            if g.total_points['A'] >= g.punts_partida:
+                g.log.append(f'Partida guanyada per l\'equip A ({g.total_points["A"]} a {g.total_points["B"]})')
+            elif g.total_points['B'] >= g.punts_partida:
+                g.log.append(f'Partida guanyada per l\'equip B ({g.total_points["B"]} a {g.total_points["A"]})')
+            else:
+                g.team_points = {'A': 0, 'B': 0}
+                redraw()
+                g.new_deal()
+        # ------------------ REDRAW ------------------
+        now = time.time()
+        if now - g.last_redraw > 4.0:
+            g.last_redraw = now
+            redraw()
+
     ui.timer(2.0, client_timer_callback, active=True)
 
 # --------------------------- ARRANCA -------------------------------
 
-with ui.header().classes('justify-between'):
+with ui.header().classes('justify-between'):    
     ui.label('🂡 Botifarra — Demo NiceGUI').classes('text-xl font-bold')
     ui.link('J1', '/game/TEST/0')
     ui.link('J2', '/game/TEST/1')
     ui.link('J3', '/game/TEST/2')
     ui.link('J4', '/game/TEST/3')
+
 
 ui.run(port=8080, reload=False, show=False)  # posa reload=True si vols autorecàrrega

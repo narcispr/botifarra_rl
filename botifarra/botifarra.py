@@ -14,7 +14,7 @@ class Botifarra:
         self.jugador_inicial = 0  
         self.jugador_actual = 1 # El jugador que comença jugant és el de després del que ha cantat
         self.jugades_fetes = 0
-        self.trumfo = BOTIFARRA
+        self.trumfo = -1  # -1 = no cantat, 0..3 = pals, 4 = botifarra
         self.taula = []
         self.pals = {0: 'Oros', 1: 'Copes', 2: 'Espases', 3: 'Bastos', 4: 'Botifarra'}
 
