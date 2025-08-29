@@ -222,7 +222,7 @@ def game_page(room: str, seat: int):
 
     with canta_row:
         for i in range(CANTA_MAX):
-            im = ui.image().props('no-transition no-spinner').style(f'width:{CARD_W_TABLE}px; display:none;')
+            im = ui.image().props('no-transition no-spinner').style(f'width:{int(CARD_W_TABLE*4/6)}px; display:none;')
 
             # handler fix que consulta el valor del slot en el moment del clic
             def make_c_handler(idx, im_ref=im):
@@ -318,19 +318,26 @@ def game_page(room: str, seat: int):
             prev['title'] = new_title
 
         # Puntuacions (actualitza files només si canvien)
-        if (prev['scoreA'] != g.team_points['A'] or
-            prev['scoreB'] != g.team_points['B'] or
-            prev['totalA'] != g.total_points['A'] or
-            prev['totalB'] != g.total_points['B']):
-            score_table.rows = [
-                {'equip': 'TOTAL:',   'A': g.total_points['A'], 'B': g.total_points['B']},
-                {'equip': 'PARCIAL:', 'A': g.team_points['A'],  'B': g.team_points['B']},
-            ]
-            score_table.update()
-            prev['scoreA']  = g.team_points['A']
-            prev['scoreB']  = g.team_points['B']
-            prev['totalA']  = g.total_points['A']
-            prev['totalB']  = g.total_points['B']
+        # if (prev['scoreA'] != g.team_points['A'] or
+        #     prev['scoreB'] != g.team_points['B'] or
+        #     prev['totalA'] != g.total_points['A'] or
+        #     prev['totalB'] != g.total_points['B']):
+        #     score_table.rows = [
+        #         {'equip': 'TOTAL:',   'A': g.total_points['A'], 'B': g.total_points['B']},
+        #         {'equip': 'PARCIAL:', 'A': g.team_points['A'],  'B': g.team_points['B']},
+        #     ]
+        #     score_table.update()
+        #     prev['scoreA']  = g.team_points['A']
+        #     prev['scoreB']  = g.team_points['B']
+        #     prev['totalA']  = g.total_points['A']
+        #     prev['totalB']  = g.total_points['B']
+
+        # Sempre actualitza (per evitar errors de concurrència)
+        score_table.rows = [
+            {'equip': 'TOTAL:',   'A': g.total_points['A'], 'B': g.total_points['B']},
+            {'equip': 'PARCIAL:', 'A': g.team_points['A'],  'B': g.team_points['B']},
+        ]
+        score_table.update()
 
         # Jugadors actiu (deixes el teu clear; si vols, també es pot fer in-place)
         top_row.clear()
@@ -374,8 +381,8 @@ def game_page(room: str, seat: int):
                     table_imgs[i].classes(remove='opacity-40')  # per si vols diferenciar visualment
                 else:
                     show_img(table_imgs[i], card_img_src(50))   # dors de carta
-                    table_labels[i].style('display:none;')
-                    table_imgs[i].classes(add='opacity-40')     # (opcional) més suau
+                    table_labels[i].set_text('...')
+                    table_imgs[i].classes()     # (opcional) més suau
 
             prev['table'] = list(g.table)
 
@@ -498,8 +505,10 @@ def game_page(room: str, seat: int):
 
             if g.total_points['A'] >= g.punts_partida:
                 g.log.append(f'Partida guanyada per l\'equip A ({g.total_points["A"]} a {g.total_points["B"]})')
+                redraw()
             elif g.total_points['B'] >= g.punts_partida:
                 g.log.append(f'Partida guanyada per l\'equip B ({g.total_points["B"]} a {g.total_points["A"]})')
+                redraw()
             else:
                 g.team_points = {'A': 0, 'B': 0}
                 redraw()
