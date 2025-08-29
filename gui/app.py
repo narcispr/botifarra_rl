@@ -183,16 +183,16 @@ def player_box(name: str, active: bool):
     ):
         ui.label(name).classes('text-lg')
 
-# --------------------------- VISTA PER JUGADOR ----------------------
 
+# --------------------------- VISTA PER JUGADOR ----------------------
 @ui.page('/game/{room}/{seat}')
 def game_page(room: str, seat: int):
     assert seat in range(4), 'Seat must be one of 1..4'
     g = get_game(room)
-    
-    # ---------- elements (referències) ----------
+
+    # ---------- capçalera ----------
     title = ui.label().classes('text-2xl font-bold')
-    
+
     columns = [
         {'name': 'equip', 'label': '', 'field': 'equip', 'align': 'left', 'headerClasses': 'font-bold'},
         {'name': 'A', 'label': 'A', 'field': 'A', 'align': 'center', 'headerClasses': 'font-bold'},
@@ -205,89 +205,208 @@ def game_page(room: str, seat: int):
             'text-center border-collapse border border-gray-400 text-xl'
         ).style('width:250px;')
 
-        trumfo_card = ui.image().classes('border-2 border-blue-600 rounded').style('width:95px;')
+        # trumfo: element fix, només canvia la source
+        trumfo_card = ui.image().props('no-transition no-spinner').style('width:95px;')
 
-    # fila pels jugadors (a part)
+    # fila pels jugadors (la deixo tal qual)
     with ui.row().classes('gap-4 my-2'):
         top_row = ui.row().classes('gap-4')  # caixetes jugadors
 
-    canta_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
-    table_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
     action_log = ui.label().classes('italic text-slate-600 my-2 text-lg')
 
-    hand_row = ui.row().classes('gap-2 my-4')   # mà privada
+    # ---------- CANTA: slots fixos (handlers fixos) ----------
+    CANTA_MAX = 6  # màxim (incloent delegats)
+    canta_row = ui.row().classes('gap-4 my-6')
+    canta_imgs: list = []
+    canta_choice: list = [None] * CANTA_MAX  # valor viu per slot
 
-    with ui.row().classes('gap-3'):
-        ui.button('Nova mà', on_click=lambda: g.new_deal())
+    with canta_row:
+        for i in range(CANTA_MAX):
+            im = ui.image().props('no-transition no-spinner').style(f'width:{CARD_W_TABLE}px; display:none;')
 
-    # ---------- funcions d’UI ----------
+            # handler fix que consulta el valor del slot en el moment del clic
+            def make_c_handler(idx, im_ref=im):
+                def _on_click(e):
+                    t_id = canta_choice[idx]
+                    if t_id is not None:
+                        # antirebot (opcional)
+                        im_ref.props('disable')
+                        try:
+                            g.set_trumfo(t_id)
+                        finally:
+                            im_ref.props(remove='disable')
+                return _on_click
+
+            im.on('click', make_c_handler(i))
+            canta_imgs.append(im)
+
+    # ---------- TAULA: 4 slots fixos (sense clear) ----------
+    TABLE_SLOTS = 4
+    table_row = ui.row().classes('gap-4 my-6')
+    table_imgs, table_labels = [], []
+    with table_row:
+        for _ in range(TABLE_SLOTS):
+            with ui.column().classes('items-center'):
+                im = ui.image().props('no-transition no-spinner').style(f'width:{CARD_W_TABLE}px; display:none;')
+                lb = ui.label('').classes('text-sm').style('display:none;')
+                table_imgs.append(im)
+                table_labels.append(lb)
+
+    # ---------- MÀ: 12 slots fixos (handlers fixos) ----------
+    HAND_MAX = 12
+    hand_row = ui.row().classes('gap-2 my-4')
+    # ui.label('La teva mà').classes('mr-2 font-semibold')
+
+    hand_imgs: list = []
+    hand_slot_card: list = [None] * HAND_MAX   # valor viu de cada slot
+
+    with hand_row:
+        for i in range(HAND_MAX):
+            im = ui.image().props('no-transition no-spinner').classes(
+                'cursor-pointer hover:scale-105 transition'
+            ).style(f'width:{CARD_W_HAND}px; display:none;')
+
+            # Handler FIX per slot: sempre consulta hand_slot_card[i]
+            def make_handler(idx, im_ref=im):
+                def _on_click(e):
+                    card_id = hand_slot_card[idx]
+                    if card_id is not None:
+                        im_ref.props('disable')
+                        try:
+                            g.play_card(seat, card_id)
+                        finally:
+                            im_ref.props(remove='disable')
+                return _on_click
+
+            im.on('click', make_handler(i))
+            hand_imgs.append(im)
+
+    # with ui.row().classes('gap-3'):
+    #     ui.button('Nova mà', on_click=lambda: g.new_deal())
+
+    # ---------- estat previ per evitar updates innecessaris ----------
+    prev = {
+        'trumfo_img': None,
+        'table': [],
+        'hand': [],
+        'canta_on': None,
+        'scoreA': None, 'scoreB': None, 'totalA': None, 'totalB': None,
+        'title': None, 'log_tail': None,
+        'turn': None,
+    }
+
+    # ---------- helpers ----------
+    def show_img(img, src):
+        if img is None:
+            return
+        img.set_source(src)
+        img.style('display:block;')
+
+    def hide_img(img):
+        if img is None:
+            return
+        img.style('display:none;')
+
+    # ---------- REDRAW sense flicker ----------
     def redraw():
-        # Update last redraw time
         g.last_redraw = time.time()
 
-        # actualitzem el títol
-        title.set_text(f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})')
-        
-        # actualitzem el contingut de la taula canviant les files
-        score_table.rows = [
-            {'equip': 'TOTAL:', 'A': g.total_points['A'], 'B': g.total_points['B']},
-            {'equip': 'PARCIAL:', 'A': g.team_points['A'], 'B': g.team_points['B']},
-        ]
-        score_table.update()
+        # Títol (només si canvia)
+        new_title = f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})'
+        if prev['title'] != new_title:
+            title.set_text(new_title)
+            prev['title'] = new_title
 
-        # Fila jugadors (J1..J4) amb actiu resaltat
+        # Puntuacions (actualitza files només si canvien)
+        if (prev['scoreA'] != g.team_points['A'] or
+            prev['scoreB'] != g.team_points['B'] or
+            prev['totalA'] != g.total_points['A'] or
+            prev['totalB'] != g.total_points['B']):
+            score_table.rows = [
+                {'equip': 'TOTAL:',   'A': g.total_points['A'], 'B': g.total_points['B']},
+                {'equip': 'PARCIAL:', 'A': g.team_points['A'],  'B': g.team_points['B']},
+            ]
+            score_table.update()
+            prev['scoreA']  = g.team_points['A']
+            prev['scoreB']  = g.team_points['B']
+            prev['totalA']  = g.total_points['A']
+            prev['totalB']  = g.total_points['B']
+
+        # Jugadors actiu (deixes el teu clear; si vols, també es pot fer in-place)
         top_row.clear()
         with top_row:
             for s in range(4):
                 player_box(SEAT_NAME[s], active=(g.joc.jugador_actual == s))
 
-        # trumfo (pal de partida)
+        # Trumfo (només canvia la source)
         img_trumfo = g.joc.trumfo * 12 if g.joc.trumfo != -1 else 50
         if g.joc.trumfo == 4:
             img_trumfo = 48
-        trumfo_card.set_source(card_img_src(img_trumfo))
+        if prev['trumfo_img'] != img_trumfo:
+            trumfo_card.set_source(card_img_src(img_trumfo))
+            prev['trumfo_img'] = img_trumfo
 
-        # Canta UI
-        canta_row.clear()
-        if g.canta == seat and g.cantant:
-            with canta_row:
+        # CANTA (slots fixos + array de valors)
+        want_canta = (g.canta == seat and g.cantant)
+        if prev['canta_on'] != want_canta:
+            # reset visuals
+            for i in range(CANTA_MAX):
+                canta_choice[i] = None
+                hide_img(canta_imgs[i])
+
+            if want_canta:
                 v = 6 if not g.delegats else 5
-                for c in range(v):
-                    with ui.column().classes('items-center'):
-                        img = ui.image(card_img_src(c * 12)).classes(
-                            'cursor-pointer hover:scale-105 transition'
-                        ).style('width:80px;')
-                        img.on('click', lambda e, t_id=c: g.set_trumfo(t_id))
-                        
-        # Cartes a la taula
-        table_row.clear()
-        with table_row:
-            for (s, cid) in g.table:
-                with ui.column().classes('items-center'):
-                    ui.image(card_img_src(cid)).style(f'width:{CARD_W_TABLE}px;')
-                    ui.label(SEAT_NAME[s]).classes('text-sm')
+                for i, c in enumerate(range(v)):
+                    canta_choice[i] = c
+                    show_img(canta_imgs[i], card_img_src(c * 12))
+            prev['canta_on'] = want_canta
 
-        # Mà privada del jugador connectat
-        hand_row.clear()
-        with hand_row:
-            ui.label('La teva mà').classes('mr-2 font-semibold')
-            for cid in g.players[seat]:
-                img = ui.image(card_img_src(cid)).classes(
-                    'cursor-pointer hover:scale-105 transition'
-                ).style(f'width:{CARD_W_HAND}px;')
-                img.on('click', lambda e, card_id=cid: g.play_card(seat, card_id))
+        # TAULA (slots fixos)
+        if prev['table'] != g.table:
+            # amaga tot
+            for i in range(TABLE_SLOTS):
+                hide_img(table_imgs[i])
+                table_labels[i].style('display:none;')
+            # pinta actual
+            for i, (s, cid) in enumerate(g.table[:TABLE_SLOTS]):
+                show_img(table_imgs[i], card_img_src(cid))
+                table_labels[i].set_text(SEAT_NAME[s])
+                table_labels[i].style('display:block;')
+            prev['table'] = list(g.table)
+
+        # MÀ (slots fixos; NO re-enllaça handlers)
+        if prev['hand'] != g.players[seat]:
+            current_hand = g.players[seat]
+
+            # amaga tots els slots per defecte i esborra valor
+            for i in range(HAND_MAX):
+                hand_slot_card[i] = None
+                hand_imgs[i].style('display:none;')
+
+            # mostra els necessaris amb el valor actual del slot
+            for i, cid in enumerate(current_hand[:HAND_MAX]):
+                hand_slot_card[i] = cid
+                hand_imgs[i].set_source(card_img_src(cid))
+                hand_imgs[i].style('display:inline-block;')
+
+            prev['hand'] = list(g.players[seat])
 
         # Log curt i torn
-        action_log.set_text(''.join(g.log[-1:]) + (f'   | Torn: {SEAT_NAME[g.joc.jugador_actual]}' if not g.cantant else ''))
+        log_tail = ''.join(g.log[-1:]) + (f'   | Torn: {SEAT_NAME[g.joc.jugador_actual]}' if not g.cantant else '')
+        if prev['log_tail'] != log_tail:
+            action_log.set_text(log_tail)
+            prev['log_tail'] = log_tail
 
     # Subscriu aquesta vista i des-subscriu al desconnectar del client
-    g.subscribers.add(redraw)  # el client ja està connectat en entrar a la pàgina
+    g.subscribers.add(redraw)
     ui.context.client.on_disconnect(lambda: g.subscribers.discard(redraw))
 
-    # Dibuix inicial
+    # dibuix inicial
     redraw()
 
-    # Timer per client
+
+
+    # ---------------- Timer per client CONTROLA TOTA LA LÒGICA DEL JOC I LES IA----------------
     def client_timer_callback():
         if seat != 0:
             redraw()
