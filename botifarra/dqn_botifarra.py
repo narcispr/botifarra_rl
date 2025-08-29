@@ -209,5 +209,6 @@ class DQNBotifarra():
         
     def load_weights(self, filename):
         print('... loading weights ...')
-        self.Q_eval.load_state_dict(T.load(filename + '.weights'))
-        self.Q_target.load_state_dict(T.load(filename + '.weights'))
+        device = T.device('cuda' if T.cuda.is_available() else 'cpu')
+        self.Q_eval.load_state_dict(T.load(filename + '.weights', map_location=device))
+        self.Q_target.load_state_dict(T.load(filename + '.weights', map_location=device))
