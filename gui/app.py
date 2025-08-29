@@ -361,17 +361,22 @@ def game_page(room: str, seat: int):
                     show_img(canta_imgs[i], card_img_src(c * 12))
             prev['canta_on'] = want_canta
 
-        # TAULA (slots fixos)
+        # TAULA (sempre 4 imatges: cartes reals + dorsos com a placeholders)
         if prev['table'] != g.table:
-            # amaga tot
+            # pinta 0..len(g.table)-1 amb cartes reals i resta amb dors (50.png)
+            n = len(g.table)
             for i in range(TABLE_SLOTS):
-                hide_img(table_imgs[i])
-                table_labels[i].style('display:none;')
-            # pinta actual
-            for i, (s, cid) in enumerate(g.table[:TABLE_SLOTS]):
-                show_img(table_imgs[i], card_img_src(cid))
-                table_labels[i].set_text(SEAT_NAME[s])
-                table_labels[i].style('display:block;')
+                if i < n:
+                    s, cid = g.table[i]
+                    show_img(table_imgs[i], card_img_src(cid))
+                    table_labels[i].set_text(SEAT_NAME[s])
+                    table_labels[i].style('display:block;')
+                    table_imgs[i].classes(remove='opacity-40')  # per si vols diferenciar visualment
+                else:
+                    show_img(table_imgs[i], card_img_src(50))   # dors de carta
+                    table_labels[i].style('display:none;')
+                    table_imgs[i].classes(add='opacity-40')     # (opcional) més suau
+
             prev['table'] = list(g.table)
 
         # MÀ (slots fixos; NO re-enllaça handlers)
