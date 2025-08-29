@@ -190,110 +190,113 @@ def game_page(room: str, seat: int):
     assert seat in range(4), 'Seat must be one of 1..4'
     g = get_game(room)
 
-    # ---------- capçalera ----------
-    title = ui.label().classes('text-2xl font-bold')
+     # Contenidor global centrat i amb amplada màxima
+    with ui.column().classes('w-full items-center'):
+        with ui.column().classes('w-full max-w-[980px] mx-auto items-center gap-4'):
+            # ---------- capçalera ----------
+            title = ui.label().classes('text-2xl font-bold')
 
-    columns = [
-        {'name': 'equip', 'label': '', 'field': 'equip', 'align': 'left', 'headerClasses': 'font-bold'},
-        {'name': 'A', 'label': 'A', 'field': 'A', 'align': 'center', 'headerClasses': 'font-bold'},
-        {'name': 'B', 'label': 'B', 'field': 'B', 'align': 'center', 'headerClasses': 'font-bold'},
-    ]
+            columns = [
+                {'name': 'equip', 'label': '', 'field': 'equip', 'align': 'left', 'headerClasses': 'font-bold'},
+                {'name': 'A', 'label': 'A', 'field': 'A', 'align': 'center', 'headerClasses': 'font-bold'},
+                {'name': 'B', 'label': 'B', 'field': 'B', 'align': 'center', 'headerClasses': 'font-bold'},
+            ]
 
-    # fila amb taula i trumfo al costat
-    with ui.row().classes('gap-8 items-start my-4'):
-        score_table = ui.table(columns=columns, rows=[]).classes(
-            'text-center border-collapse border border-gray-400 text-xl'
-        ).style('width:250px;')
+            # fila amb taula i trumfo al costat
+            with ui.row().classes('gap-8 items-start my-4'):
+                score_table = ui.table(columns=columns, rows=[]).classes(
+                    'text-center border-collapse border border-gray-400 text-xl'
+                ).style('width:250px;')
 
-        # trumfo: element fix, només canvia la source
-        trumfo_card = ui.image().props('no-transition no-spinner').style('width:95px;')
+                # trumfo: element fix, només canvia la source
+                trumfo_card = ui.image().props('no-transition no-spinner').style('width:95px;')
 
-    # fila pels jugadors (la deixo tal qual)
-    with ui.row().classes('gap-4 my-2'):
-        top_row = ui.row().classes('gap-4')  # caixetes jugadors
+            # fila pels jugadors (la deixo tal qual)
+            with ui.row().classes('gap-4 my-2'):
+                top_row = ui.row().classes('gap-4')  # caixetes jugadors
 
-    action_log = ui.label().classes('italic text-slate-600 my-2 text-lg')
+            action_log = ui.label().classes('italic text-slate-600 my-2 text-lg')
 
-    # ---------- CANTA: slots fixos (handlers fixos) ----------
-    CANTA_MAX = 6  # màxim (incloent delegats)
-    canta_row = ui.row().classes('gap-4 my-6')
-    canta_imgs: list = []
-    canta_choice: list = [None] * CANTA_MAX  # valor viu per slot
+            # ---------- CANTA: slots fixos (handlers fixos) ----------
+            CANTA_MAX = 6  # màxim (incloent delegats)
+            canta_row = ui.row().classes('gap-4 my-6')
+            canta_imgs: list = []
+            canta_choice: list = [None] * CANTA_MAX  # valor viu per slot
 
-    with canta_row:
-        for i in range(CANTA_MAX):
-            im = ui.image().props('no-transition no-spinner').style(f'width:{int(CARD_W_TABLE*4/6)}px; display:none;')
+            with canta_row:
+                for i in range(CANTA_MAX):
+                    im = ui.image().props('no-transition no-spinner').style(f'width:{int(CARD_W_TABLE*4/6)}px; display:none;')
 
-            # handler fix que consulta el valor del slot en el moment del clic
-            def make_c_handler(idx, im_ref=im):
-                def _on_click(e):
-                    t_id = canta_choice[idx]
-                    if t_id is not None:
-                        # antirebot (opcional)
-                        im_ref.props('disable')
-                        try:
-                            g.set_trumfo(t_id)
-                        finally:
-                            im_ref.props(remove='disable')
-                return _on_click
+                    # handler fix que consulta el valor del slot en el moment del clic
+                    def make_c_handler(idx, im_ref=im):
+                        def _on_click(e):
+                            t_id = canta_choice[idx]
+                            if t_id is not None:
+                                # antirebot (opcional)
+                                im_ref.props('disable')
+                                try:
+                                    g.set_trumfo(t_id)
+                                finally:
+                                    im_ref.props(remove='disable')
+                        return _on_click
 
-            im.on('click', make_c_handler(i))
-            canta_imgs.append(im)
+                    im.on('click', make_c_handler(i))
+                    canta_imgs.append(im)
 
-    # ---------- TAULA: 4 slots fixos (sense clear) ----------
-    TABLE_SLOTS = 4
-    table_row = ui.row().classes('gap-4 my-6')
-    table_imgs, table_labels = [], []
-    with table_row:
-        for _ in range(TABLE_SLOTS):
-            with ui.column().classes('items-center'):
-                im = ui.image().props('no-transition no-spinner').style(f'width:{CARD_W_TABLE}px; display:none;')
-                lb = ui.label('').classes('text-sm').style('display:none;')
-                table_imgs.append(im)
-                table_labels.append(lb)
+            # ---------- TAULA: 4 slots fixos (sense clear) ----------
+            TABLE_SLOTS = 4
+            table_row = ui.row().classes('gap-4 my-6')
+            table_imgs, table_labels = [], []
+            with table_row:
+                for _ in range(TABLE_SLOTS):
+                    with ui.column().classes('items-center'):
+                        im = ui.image().props('no-transition no-spinner').style(f'width:{CARD_W_TABLE}px; display:none;')
+                        lb = ui.label('').classes('text-sm').style('display:none;')
+                        table_imgs.append(im)
+                        table_labels.append(lb)
 
-    # ---------- MÀ: 12 slots fixos (handlers fixos) ----------
-    HAND_MAX = 12
-    hand_row = ui.row().classes('gap-2 my-4')
-    # ui.label('La teva mà').classes('mr-2 font-semibold')
+            # ---------- MÀ: 12 slots fixos (handlers fixos) ----------
+            HAND_MAX = 12
+            hand_row = ui.row().classes('gap-2 my-4')
+            # ui.label('La teva mà').classes('mr-2 font-semibold')
 
-    hand_imgs: list = []
-    hand_slot_card: list = [None] * HAND_MAX   # valor viu de cada slot
+            hand_imgs: list = []
+            hand_slot_card: list = [None] * HAND_MAX   # valor viu de cada slot
 
-    with hand_row:
-        for i in range(HAND_MAX):
-            im = ui.image().props('no-transition no-spinner').classes(
-                'cursor-pointer hover:scale-105 transition'
-            ).style(f'width:{CARD_W_HAND}px; display:none;')
+            with hand_row:
+                for i in range(HAND_MAX):
+                    im = ui.image().props('no-transition no-spinner').classes(
+                        'cursor-pointer hover:scale-105 transition'
+                    ).style(f'width:{CARD_W_HAND}px; display:none;')
 
-            # Handler FIX per slot: sempre consulta hand_slot_card[i]
-            def make_handler(idx, im_ref=im):
-                def _on_click(e):
-                    card_id = hand_slot_card[idx]
-                    if card_id is not None:
-                        im_ref.props('disable')
-                        try:
-                            g.play_card(seat, card_id)
-                        finally:
-                            im_ref.props(remove='disable')
-                return _on_click
+                    # Handler FIX per slot: sempre consulta hand_slot_card[i]
+                    def make_handler(idx, im_ref=im):
+                        def _on_click(e):
+                            card_id = hand_slot_card[idx]
+                            if card_id is not None:
+                                im_ref.props('disable')
+                                try:
+                                    g.play_card(seat, card_id)
+                                finally:
+                                    im_ref.props(remove='disable')
+                        return _on_click
 
-            im.on('click', make_handler(i))
-            hand_imgs.append(im)
+                    im.on('click', make_handler(i))
+                    hand_imgs.append(im)
 
-    # with ui.row().classes('gap-3'):
-    #     ui.button('Nova mà', on_click=lambda: g.new_deal())
+            # with ui.row().classes('gap-3'):
+            #     ui.button('Nova mà', on_click=lambda: g.new_deal())
 
-    # ---------- estat previ per evitar updates innecessaris ----------
-    prev = {
-        'trumfo_img': None,
-        'table': [],
-        'hand': [],
-        'canta_on': None,
-        'scoreA': None, 'scoreB': None, 'totalA': None, 'totalB': None,
-        'title': None, 'log_tail': None,
-        'turn': None,
-    }
+            # ---------- estat previ per evitar updates innecessaris ----------
+            prev = {
+                'trumfo_img': None,
+                'table': [],
+                'hand': [],
+                'canta_on': None,
+                'scoreA': None, 'scoreB': None, 'totalA': None, 'totalB': None,
+                'title': None, 'log_tail': None,
+                'turn': None,
+            }
 
     # ---------- helpers ----------
     def show_img(img, src):
@@ -407,6 +410,7 @@ def game_page(room: str, seat: int):
         log_tail = ''.join(g.log[-1:]) + (f'   | Torn: {SEAT_NAME[g.joc.jugador_actual]}' if not g.cantant else '')
         if prev['log_tail'] != log_tail:
             action_log.set_text(log_tail)
+            action_log.style('background-color: #d0ebff; width: 100%; text-align: center; padding: 8px;')
             prev['log_tail'] = log_tail
 
     # Subscriu aquesta vista i des-subscriu al desconnectar del client
