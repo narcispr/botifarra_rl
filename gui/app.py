@@ -42,7 +42,7 @@ class Game:
         self.last_redraw = time.time()
 
         # Load IA weights
-        self.agent_IA.load_weights("/home/narcis/catkin_ws/src/botifarra/agents/botifarra_v2_200k_dqn")
+        self.agent_IA.load_weights("../agents/botifarra_v2_200k_dqn")
 
     def broadcast(self):
         """Re-pinta totes les vistes d'aquesta partida."""
@@ -170,16 +170,16 @@ def get_game(room: str) -> Game:
 
 # --------------------------- UTILITATS UI ---------------------------
 
-CARD_W_TABLE = 120   # px
-CARD_W_HAND = 95    # px
+CARD_W_TABLE = 90   # px
+CARD_W_HAND = 70    # px
 
 def card_img_src(card_id: int) -> str:
     return f'/static/cards/{card_id}.png'
 
 def player_box(name: str, active: bool):
     with ui.card().classes(
-        'w-24 h-12 items-center justify-center flex border '
-        + ('border-blue-600 bg-blue-50' if active else 'border-black')
+        'w-20 h-12 items-center justify-center flex border '
+        + ('border-blue-600 bg-blue-400' if active else 'border-black')
     ):
         ui.label(name).classes('text-lg')
 
@@ -192,14 +192,24 @@ def game_page(room: str, seat: int):
     
     # ---------- elements (referències) ----------
     title = ui.label().classes('text-2xl font-bold')
-    score_total = ui.label().classes('text-xl')
-    score = ui.label().classes('text-lg')
+    
+    columns = [
+        {'name': 'equip', 'label': '', 'field': 'equip', 'align': 'left', 'headerClasses': 'font-bold'},
+        {'name': 'A', 'label': 'A', 'field': 'A', 'align': 'center', 'headerClasses': 'font-bold'},
+        {'name': 'B', 'label': 'B', 'field': 'B', 'align': 'center', 'headerClasses': 'font-bold'},
+    ]
 
+    # fila amb taula i trumfo al costat
+    with ui.row().classes('gap-8 items-start my-4'):
+        score_table = ui.table(columns=columns, rows=[]).classes(
+            'text-center border-collapse border border-gray-400 text-xl'
+        ).style('width:250px;')
 
-    with ui.row().classes('gap-4 items-center my-2'):
-        top_row = ui.row().classes('gap-4')  # jugadors
-        ui.row().style('width:20px;')  # Add gap between top_row and trumfo_card
-        trumfo_card = ui.image().classes('border-2 border-blue-600 rounded').style('width:110px;')
+        trumfo_card = ui.image().classes('border-2 border-blue-600 rounded').style('width:95px;')
+
+    # fila pels jugadors (a part)
+    with ui.row().classes('gap-4 my-2'):
+        top_row = ui.row().classes('gap-4')  # caixetes jugadors
 
     canta_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
     table_row = ui.row().classes('gap-4 my-6')  # cartes a la taula
@@ -212,10 +222,18 @@ def game_page(room: str, seat: int):
 
     # ---------- funcions d’UI ----------
     def redraw():
-        title.set_text(f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})')
-        score_total.set_text(f'TOTAL:  {g.total_points["A"]} Equip A  —  {g.total_points["B"]} Equip B')
-        score.set_text(f'PARCIAL:  {g.team_points["A"]} Equip A  —  {g.team_points["B"]} Equip B')
+        # Update last redraw time
         g.last_redraw = time.time()
+
+        # actualitzem el títol
+        title.set_text(f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})')
+        
+        # actualitzem el contingut de la taula canviant les files
+        score_table.rows = [
+            {'equip': 'TOTAL:', 'A': g.total_points['A'], 'B': g.total_points['B']},
+            {'equip': 'PARCIAL:', 'A': g.team_points['A'], 'B': g.team_points['B']},
+        ]
+        score_table.update()
 
         # Fila jugadors (J1..J4) amb actiu resaltat
         top_row.clear()
