@@ -38,7 +38,7 @@ class Jugador:
             return BASTOS
         
         # Si tenim molts trumfos cantem botifarra
-        if sum(carta.get_punts() for carta in self.ma) >= 20:
+        if sum(carta.get_punts() for carta in self.ma) > 20:
             return BOTIFARRA
         
         # Si no podem cantar però podem delegar, deleguem
@@ -66,9 +66,26 @@ class Jugador:
                 guanyadores.append(c)
         return guanyadores
     
+    def __cartes_amb_punts__(self, pal: int = -1) -> List[Carta]:
+        return [carta for carta in self.ma if carta.get_punts() > 0 and ((carta.pal == pal) or (pal == -1))]
+    
+    def __mes_petita_del_pal__(self, pal: int = -1) -> List[Carta]:
+        cartes = []
+        for p in range(4):
+            if pal == -1 or p == pal:
+                cartes_pal = self.__cartes_pal__(p)
+                if len(cartes_pal) > 0:
+                    cartes.append(min(cartes_pal))
+        return cartes
+    
+    def __amb_punts_o_mes_petita__(self, pal: int=-1) -> List[Carta]:
+        # Retorna les cartes __cartes_amb_punts__ + la __mes_petita_del_pal__. Utilitza un conjunt per evitar duplicats!
+        cartes = set(self.__cartes_amb_punts__(pal=pal) + self.__mes_petita_del_pal__(pal=pal))
+        return list(cartes)
+       
     def __hem_de_matar__(self, taula: List[Carta], matar_idx: int, del_pal: List[Carta], trumfos: List[Carta], trumfo: int) -> Tuple[List[Carta], bool, bool]:
-        falla_pal = False
-        falla_trumfo = False
+        falla_pal = False       # significa que no te més cartes d'aquell pal
+        falla_trumfo = False    # significa que no te trumfo que marti la primera base (i.e., si qui guanya la base es trumfo és que no te trumfo però si es trumfo vol dir que no te cap carta superior al trumfo jugat)
 
         if len(del_pal) > 0:   
             # ... i tenim Pal de la carta jugada:
@@ -88,11 +105,13 @@ class Jugador:
                 # tornem totes les que poden matar.
                 return trumfo_mata, falla_pal, falla_trumfo
             else:
-            # ... ni trumfos que matin: Tornem totes les cartes
-                return self.ma, falla_pal, falla_trumfo
-        # ... si no tenim ni pal ni trumfos: Tornem totes les cartes
+            # ... ni trumfos que matin: Tornem la mes petita de cada pal
+                falla_trumfo = True
+                return self.__mes_petita_del_pal__(), falla_pal, falla_trumfo
+            
+        # ... si no tenim ni pal ni trumfos: Tornem la més petita de cada pal (no matem...)
         falla_trumfo = True
-        return self.ma, falla_pal, falla_trumfo
+        return self.__mes_petita_del_pal__(), falla_pal, falla_trumfo
         
     def cartes_valides(self, trumfo: int, taula: list) -> Tuple[List[Carta], bool, bool]:
         """
@@ -121,11 +140,11 @@ class Jugador:
             if (taula[0].get_valor(taula[0].pal, trumfo) > taula[1].get_valor(taula[0].pal, trumfo)):
                 if len(del_pal) > 0:
                     # Si tenim cartes del pal, qualsevol del pal és vàlida
-                    return del_pal, falla_pal, falla_trumfo
+                    return self.__amb_punts_o_mes_petita__(taula[0].pal), falla_pal, falla_trumfo
                 else:
                     # Si no tenim cartes del pal, qualsevol és vàlida
                     falla_pal = True
-                    return self.ma, falla_pal, falla_trumfo
+                    return self.__amb_punts_o_mes_petita__(), falla_pal, falla_trumfo
             # ... i la mà no és del company:
             else:
                 # Hem de matar si podem
@@ -138,12 +157,12 @@ class Jugador:
                 taula[1].get_valor(taula[0].pal, trumfo) > 
                 taula[2].get_valor(taula[0].pal, trumfo)):
                 if len(del_pal) > 0:
-                    # Si tenim cartes del pal, qualsevol del pal és vàlida
-                    return del_pal, falla_pal, falla_trumfo
+                    # Si tenim cartes del pal, qualsevol del pal amb punts o la més petita és vàlida
+                    return self.__amb_punts_o_mes_petita__(taula[0].pal), falla_pal, falla_trumfo
                 else:
-                    # Si no tenim cartes del pal, qualsevol és vàlida
+                    # Si no tenim cartes del pal, qualsevol del pal amb punts o la més petita és vàlida
                     falla_pal = True
-                    return self.ma, falla_pal, falla_trumfo
+                    return self.__amb_punts_o_mes_petita__(), falla_pal, falla_trumfo
             # ... i la mà no és del company:
             else:
                 # Si podem, hem de matar la carta més alta dels jugadors rivals
