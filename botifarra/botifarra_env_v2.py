@@ -24,14 +24,21 @@ class BotifarraEnvV2(BotifarraEnv):
         # Actualizem estat amb fallos de pal/trumfo si n'hi ha
         _, falla_pal, falla_trumfo = self.jugadors[proxim_jugador].cartes_valides(self.trumfo, self.taula)
         # ... i actualitzem l'històric de jugades amb els pals/trumfos fallats si n'hi ha
-        if falla_pal:
+        if falla_pal: 
             for i in range(12 * self.taula[0].pal, 12 * self.taula[0].pal + 12):
-                if self.historic_mans[proxim_jugador, i] == 1:
-                    self.historic_mans[proxim_jugador, i] = 0
-        if falla_trumfo and self.trumfo != BOTIFARRA:
-            for i in range(12 * self.trumfo, 12 * self.trumfo + 12):
-                if self.historic_mans[proxim_jugador, i] == 1:
-                    self.historic_mans[proxim_jugador, i] = 0
+                self.prob_mans_companys[proxim_jugador, i] = 0
+        if falla_trumfo and self.trumfo != BOTIFARRA: # Això vol dir que no te cap trumfo que pugui guanyar la ma, no que no tingui trumfos...
+            # buscar a la taula el trumfo més gran
+            trumfos_taula = ([carta for carta in self.taula if carta.pal == self.trumfo])
+            if len(trumfos_taula) == 0: # a la taula no hi ha trumfos, el jugador ha de matar i no pot per tant no en te cap...
+                for i in range(12 * self.trumfo, 12 * self.trumfo + 12):
+                    self.prob_mans_companys[proxim_jugador, i] = 0
+            else: # a la taula hi ha trumfos, el jugador ha de matar i no en te cap que guanyi el més gran de la taula
+                trumfo_mes_gran = max(trumfos_taula)
+                ordre = [2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 1, 9] # ordre de valors de carta
+                idx_trumfo_mes_gran = ordre.index(trumfo_mes_gran.numero)
+                for i in range(idx_trumfo_mes_gran + 1, len(ordre)):
+                    self.prob_mans_companys[proxim_jugador, 12 * self.trumfo + i] = 0
 
     def get_state(self, id_jugador: int):
         # Retorna l'estat actual del joc com un diccionari o una altra estructura de dades
@@ -42,7 +49,7 @@ class BotifarraEnvV2(BotifarraEnv):
             ma_altres.extend(one_hot_encode_card(c))
         for i in range(3 - len(self.taula)):
             ma_a = copy(self.prob_mans_companys[((id_jugador + 1) % 4 + i) % 4])
-            # fer una mascara  posar a 0 les cartes de ma que valen 1 a self.jugadors[id_jugador].ma
+            # fer una mascara posar a 0 les cartes de ma que valen 1 a self.jugadors[id_jugador].ma
             for carta in self.jugadors[id_jugador].ma:
                 ma_a[carta.idx()] = 0
             ma_altres.extend(ma_a.tolist())
