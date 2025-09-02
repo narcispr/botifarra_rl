@@ -18,10 +18,10 @@ app.add_static_files('/static', 'static')  # espera ./static/cards/NN.png
 # --------------------------- MODEL ----------------------------------
 
 SEAT_NAME = {0: 'J1', 1: 'J2', 2: 'J3', 3: 'J4'}
-PLAYER_MODE = {0: 'huma', 1: 'IA', 2: 'IA', 3: 'IA'}
+
 
 class Game:
-    def __init__(self, room: str):
+    def __init__(self, room: str, players_mode: Dict[int, str] = {0: 'huma', 1: 'IA', 2: 'IA', 3: 'IA'}):
         self.room = room
         self.players = {s: [] for s in range(4)}
         self.table = []  # (seat, card)
@@ -40,6 +40,7 @@ class Game:
         self.wait = 0
         self.punts_partida = 50
         self.last_redraw = time.time()
+        self.PLAYER_MODE = players_mode
 
         # Load IA weights
         self.agent_IA.load_weights("../agents/botifarra_v2_200k_dqn")
@@ -315,25 +316,10 @@ def game_page(room: str, seat: int):
         g.last_redraw = time.time()
 
         # Títol (només si canvia)
-        new_title = f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({PLAYER_MODE[seat]})'
+        new_title = f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({g.PLAYER_MODE[seat]})'
         if prev['title'] != new_title:
             title.set_text(new_title)
             prev['title'] = new_title
-
-        # Puntuacions (actualitza files només si canvien)
-        # if (prev['scoreA'] != g.team_points['A'] or
-        #     prev['scoreB'] != g.team_points['B'] or
-        #     prev['totalA'] != g.total_points['A'] or
-        #     prev['totalB'] != g.total_points['B']):
-        #     score_table.rows = [
-        #         {'equip': 'TOTAL:',   'A': g.total_points['A'], 'B': g.total_points['B']},
-        #         {'equip': 'PARCIAL:', 'A': g.team_points['A'],  'B': g.team_points['B']},
-        #     ]
-        #     score_table.update()
-        #     prev['scoreA']  = g.team_points['A']
-        #     prev['scoreB']  = g.team_points['B']
-        #     prev['totalA']  = g.total_points['A']
-        #     prev['totalB']  = g.total_points['B']
 
         # Sempre actualitza (per evitar errors de concurrència)
         score_table.rows = [
@@ -429,7 +415,7 @@ def game_page(room: str, seat: int):
             return  # només el client 0 controla la lògica del joc
         
         # ------------------ CANTEM EL TRUMFO ------------------
-        if g.cantant and (PLAYER_MODE[g.canta] == 'IA'): # canta IA
+        if g.cantant and (g.PLAYER_MODE[g.canta] == 'IA'): # canta IA
              # Wait 1 cilcle 
             if g.wait == 0:
                 g.wait = 1
@@ -458,12 +444,12 @@ def game_page(room: str, seat: int):
                 g.log.append(f'El jugador {SEAT_NAME[g.canta]} delega...')
                 g.canta = (g.canta + 2) % 4
         
-        if g.cantant and (PLAYER_MODE[g.canta] == 'huma'): # canta Huma
+        if g.cantant and (g.PLAYER_MODE[g.canta] == 'huma'): # canta Huma
             redraw() # Si el jugador humà ha de cantar (directe o delegat) no sempre es feia el redraw bé
             return
 
         # ------------------ JUGAR CARTA LA IA ------------------  
-        if (not g.cantant) and (PLAYER_MODE[g.joc.jugador_actual] == 'IA'):
+        if (not g.cantant) and (g.PLAYER_MODE[g.joc.jugador_actual] == 'IA'):
             card = g.agent_IA.choose_action(np.array(g.last_obs), np.array(g.last_mask), deterministic=True)
             g.play_card(g.joc.jugador_actual, card)
 
