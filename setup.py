@@ -7,6 +7,8 @@ setup(
     install_requires=[
         'gymnasium',
         'numpy',
+        'nicegui',
+        'torch',
     ],
     author='Narcís',
     author_email='',

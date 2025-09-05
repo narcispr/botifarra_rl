@@ -15,7 +15,11 @@ class BotifarraEnvV2(BotifarraEnv):
         self.observation_space = spaces.Box(low=0, high=1, shape=(240,), dtype=np.int8)
         # Probabilitat de cada carta pels companys. COm que tothom sap les seves, les que no tenim poden 
         # estar a qualsevol de les 3 mans restants, per tant 1/3 = 0.333
-        self.prob_mans_companys = np.ones((4, 48), dtype=int) 
+        self.prob_mans_companys = np.ones((4, 48), dtype=int)
+
+    def reset_joc(self):
+        super().reset_joc()
+        self.prob_mans_companys = np.ones((4, 48), dtype=int)
 
     def __basa_del_company__(self) -> bool:
         # Retorna True si la ma del company es coneguda (totes les cartes tenen probabilitat 0 o 1)
@@ -51,7 +55,7 @@ class BotifarraEnvV2(BotifarraEnv):
         for c in self.taula:
             if c.pal == self.trumfo:
                 trumfos_taula.append(c)
-        return len(trumfos_taula) > 0, max(trumfos_taula)
+        return len(trumfos_taula) > 0, max(trumfos_taula) if len(trumfos_taula) > 0 else None
     
     def __carta_mes_gran_del_pal__(self) -> Carta:
         del_pal = []
@@ -62,10 +66,14 @@ class BotifarraEnvV2(BotifarraEnv):
     
     def update_state(self, ultim_jugador: int, action: int, proxim_jugador: int):
         carta_jugada = decode_action_card(action)
+        
         # Actualitzem la probabilitat de tenir la carta jugada a 0 per a tothom
         for i in range(0, 4):
             self.prob_mans_companys[i, action] = 0                                              # cap jugador pot tenir ja la carta jugada
         
+        if len(self.taula) == 1: # primer jugador de la basa
+            return
+                                              
         if self.__basa_del_company__():                                                         # basa del conmpany
             if carta_jugada.pal == self.taula[0].pal:                                           # .. juga pal
                 if carta_jugada.punts == 0:                                                     # .... no te punts
@@ -109,3 +117,10 @@ class BotifarraEnvV2(BotifarraEnv):
                 ma_a[carta.idx()] = 0
             ma_altres.extend(ma_a.tolist())
         return np.array(trumfo + ma + ma_altres, dtype=np.int8)
+    
+    def print_hist(self):
+        for j in range(1):
+            print(f"Jugador {j+1}")
+            print(self.prob_mans_companys[j].reshape((4, 12)))
+                  
+            

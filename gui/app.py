@@ -28,7 +28,7 @@ class Game:
         self.team_points = {'A': 0, 'B': 0}
         self.total_points = {'A': 0, 'B': 0}
         self.turn = -1  # jugador actiu (0...3), -1 ningú (estem cantant!)
-        self.canta = 2  # jugador que canta (0..3)
+        self.canta = 1  # jugador que canta (0..3)
         self.cantant = True  # estem en fase de cantar trumfo
         self.delegats = False  # si el jugador que canta ha delegat
         self.log = []
@@ -123,11 +123,8 @@ class Game:
         self.joc.taula.append(carta_jugada)
         # treu la carta de la mà del jugador
         self.joc.jugadors[seat].ma.remove(carta_jugada)
-
         # Actualitzem l'històric de jugades amb la carta jugada
-        self.joc.historic_mans[seat, card] = 1
-        for i in range(1, 4):
-            self.joc.historic_mans[(seat + i) % 4, card] = -1
+        self.joc.update_state(seat, card, None)
 
         # Eliminem carta de la visualització i de l'engine i l'afegim a la taula
         self.players[seat].remove(card)
@@ -138,24 +135,11 @@ class Game:
         if len(self.table) < 4:
             # passa el torn al següent
             self.joc.jugador_actual = (self.joc.jugador_actual + 1) % 4
-
-            ma_valida, falla_pal, falla_trumfo = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(
-                self.joc.trumfo, self.joc.taula
-            )
-            # ... i actualitzem l'històric de jugades amb els pals/trumfos fallats si n'hi ha
-            if falla_pal:
-                for i in range(12 * self.joc.taula[0].pal, 12 * self.joc.taula[0].pal + 12):
-                    if self.joc.historic_mans[self.joc.jugador_actual, i] == 0:
-                        self.joc.historic_mans[self.joc.jugador_actual, i] = -1
-            if falla_trumfo and self.joc.trumfo != BOTIFARRA:
-                for i in range(12 * self.joc.trumfo, 12 * self.joc.trumfo + 12):
-                    if self.joc.historic_mans[self.joc.jugador_actual, i] == 0:
-                        self.joc.historic_mans[self.joc.jugador_actual, i] = -1
+            
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
-            self.last_mask = one_hot_encode_hand(
-                self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
-            )
+            ma_valida = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+            self.last_mask = one_hot_encode_hand(ma_valida)
 
         self.broadcast()
 
@@ -285,9 +269,6 @@ def game_page(room: str, seat: int):
                     im.on('click', make_handler(i))
                     hand_imgs.append(im)
 
-            # with ui.row().classes('gap-3'):
-            #     ui.button('Nova mà', on_click=lambda: g.new_deal())
-
             # ---------- estat previ per evitar updates innecessaris ----------
             prev = {
                 'trumfo_img': None,
@@ -406,8 +387,6 @@ def game_page(room: str, seat: int):
     # dibuix inicial
     redraw()
 
-
-
     # ---------------- Timer per client CONTROLA TOTA LA LÒGICA DEL JOC I LES IA----------------
     def client_timer_callback():
         if seat != 0:
@@ -456,11 +435,12 @@ def game_page(room: str, seat: int):
         # ------------------ COMPROVEM JUANYADOR DE BASE ------------------
         if len(g.table) == 4:
             # Wait 1 cilcle 
-            if g.wait == 0:
-                g.wait = 1
+            if g.wait <= 2:
+                g.wait += 1
                 redraw()
                 return
             g.wait = 0
+            # g.joc.print_hist()
 
             idx = g.joc.carta_guanyadora(g.joc.trumfo, g.joc.taula)
             guanyador = g.table[idx][0]
