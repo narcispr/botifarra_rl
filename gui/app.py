@@ -9,6 +9,7 @@ from botifarra.dqn_botifarra import DQNBotifarra
 import numpy as np
 
 import time
+import secrets, string
 
 
 # --------------------------- ASSETS ---------------------------------
@@ -18,7 +19,6 @@ app.add_static_files('/static', 'static')  # espera ./static/cards/NN.png
 # --------------------------- MODEL ----------------------------------
 
 SEAT_NAME = {0: 'J1', 1: 'J2', 2: 'J3', 3: 'J4'}
-
 
 class Game:
     def __init__(self, room: str, players_mode: Dict[int, str] = {0: 'huma', 1: 'IA', 2: 'IA', 3: 'IA'}):
@@ -40,10 +40,26 @@ class Game:
         self.wait = 0
         self.punts_partida = 50
         self.last_redraw = time.time()
-        self.PLAYER_MODE = players_mode
+        self.players_mode = players_mode
+        # tokens d'invitació per a seients HUMANS
+        self.invite_tokens: Dict[int, str] = {}
+        # client id que té el seient (una pestanya web concreta)
+        self.seat_client: Dict[int, Optional[str]] = {0: None, 1: None, 2: None, 3: None}
+        # nom visual del jugador (opcional)
+        self.seat_name: Dict[int, Optional[str]] = {0: None, 1: None, 2: None, 3: None}
+        # quin token és el "propietari" actual del seient (per admetre recàrrega)
+        self.seat_token_in_use: Dict[int, bool] = {0: False, 1: False, 2: False, 3: False}
 
         # Load IA weights
         self.agent_IA.load_weights("../agents/botifarra_v2_200k_dqn")
+
+    def issue_invites(self):
+        """Genera o renova tokens per a tots els seients humans."""
+        self.invite_tokens = {
+            seat: gen_token(6)
+            for seat, mode in self.players_mode.items()
+            if mode == 'huma'
+        }
 
     def broadcast(self):
         """Re-pinta totes les vistes d'aquesta partida."""
@@ -104,13 +120,14 @@ class Game:
 
     # Juguem una carta
     def play_card(self, seat: int, card: int):
+        # print(f"Jugador {seat} jugant carta {card}, jugador actual: {self.joc.jugador_actual}")
         if seat != self.joc.jugador_actual:
             return
         if card not in self.players[seat]:
             return
         if len(self.table) >= 4:
             return
-
+        
         # Mira cartes vàlides pel jugador
         ma_valida = self.joc.jugadors[seat].cartes_valides(self.joc.trumfo, self.joc.taula)
         carta_jugada = decode_action_card(card)
@@ -124,7 +141,7 @@ class Game:
         # treu la carta de la mà del jugador
         self.joc.jugadors[seat].ma.remove(carta_jugada)
         # Actualitzem l'històric de jugades amb la carta jugada
-        self.joc.update_state(seat, card, None)
+        self.joc.update_state(seat, card)
 
         # Eliminem carta de la visualització i de l'engine i l'afegim a la taula
         self.players[seat].remove(card)
@@ -139,19 +156,25 @@ class Game:
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
             ma_valida = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)
-            print("ma valida:", ma_valida)
             self.last_mask = one_hot_encode_hand(ma_valida)
 
         self.broadcast()
 
 # --------------------------- LÒGICA DE SALES ------------------------
+ALPHABET = string.ascii_uppercase + string.digits
 
-rooms: Dict[str, Game] = {}
+def gen_token(n: int = 6) -> str:
+    return ''.join(secrets.choice(ALPHABET) for _ in range(n))
+
+rooms: Dict[str, 'Game'] = {}  # estat global de sales
+
+def create_game(room: str, players_mode: Dict[int, str]) -> Game:
+    g = Game(room=room, players_mode=players_mode)
+    g.issue_invites()
+    rooms[room] = g
+    return g
 
 def get_game(room: str) -> Game:
-    if room not in rooms:
-        rooms[room] = Game(room=room)
-        rooms[room].new_deal()
     return rooms[room]
 
 # --------------------------- UTILITATS UI ---------------------------
@@ -171,12 +194,39 @@ def player_box(name: str, active: bool):
 
 
 # --------------------------- VISTA PER JUGADOR ----------------------
-@ui.page('/game/{room}/{seat}')
-def game_page(room: str, seat: int):
+@ui.page('/game/{room}/{seat}/{token}')
+def game_page(room: str, seat: int, token: str):
     assert seat in range(4), 'Seat must be one of 1..4'
-    g = get_game(room)
+    if room not in rooms:
+        ui.label('❌ Partida inexistent. Torna a /').classes('text-red-600') 
+        return
+    g = rooms[room]
 
-     # Contenidor global centrat i amb amplada màxima
+    # 1) només HUMANS poden obrir la vista de jugador
+    if g.players_mode.get(seat) != 'huma':
+        ui.label('❌ Aquest seient és IA. No hi ha vista de jugador.').classes('text-red-600')
+        return
+
+    # 2) comprovar token d’autenticació desat a client.storage
+    if g.invite_tokens.get(seat) != token:
+        ui.label('❌ Token d’invitació incorrecte.').classes('text-red-600') 
+        return
+    
+    # 3) Check if seat is free
+    if g.seat_token_in_use.get(seat) is True:
+        ui.label('❌ Aquest seient ja està ocupat!').classes('text-red-600')
+        return
+
+    # 4) ocupar el seient 
+    g.seat_token_in_use[seat] = True
+
+    # allibera el seient quan aquest client se'n va
+    def release():
+        g.seat_token_in_use[seat] = False
+        
+    ui.context.client.on_disconnect(release)
+
+    # Contenidor global centrat i amb amplada màxima
     with ui.column().classes('w-full items-center'):
         with ui.column().classes('w-full max-w-[980px] mx-auto items-center gap-4'):
             # ---------- capçalera ----------
@@ -298,7 +348,7 @@ def game_page(room: str, seat: int):
         g.last_redraw = time.time()
 
         # Títol (només si canvia)
-        new_title = f'Partida {g.room} — Jugador {SEAT_NAME[seat]} ({g.PLAYER_MODE[seat]})'
+        new_title = f'Partida {g.room} — Jugador {SEAT_NAME[seat]}'
         if prev['title'] != new_title:
             title.set_text(new_title)
             prev['title'] = new_title
@@ -310,7 +360,7 @@ def game_page(room: str, seat: int):
         ]
         score_table.update()
 
-        # Jugadors actiu (deixes el teu clear; si vols, també es pot fer in-place)
+        # Indicador jugador actiu
         top_row.clear()
         with top_row:
             for s in range(4):
@@ -338,7 +388,7 @@ def game_page(room: str, seat: int):
                     canta_choice[i] = c
                     show_img(canta_imgs[i], card_img_src(c * 12))
             prev['canta_on'] = want_canta
-
+       
         # TAULA (sempre 4 imatges: cartes reals + dorsos com a placeholders)
         if prev['table'] != g.table:
             # pinta 0..len(g.table)-1 amb cartes reals i resta amb dors (50.png)
@@ -390,12 +440,17 @@ def game_page(room: str, seat: int):
 
     # ---------------- Timer per client CONTROLA TOTA LA LÒGICA DEL JOC I LES IA----------------
     def client_timer_callback():
+        # print("Timer callback", seat, g.joc.jugades_fetes, g.cantant, g.joc.jugador_actual, g.players_mode)
         if seat != 0:
             redraw()
             return  # només el client 0 controla la lògica del joc
         
+        # ------------------ Ma buida jugades == 0 --> Nova mà -----------------#
+        if g.joc.jugades_fetes == 0 and len(g.joc.jugadors[0].ma) == 0:
+            g.new_deal()
+
         # ------------------ CANTEM EL TRUMFO ------------------
-        if g.cantant and (g.PLAYER_MODE[g.canta] == 'IA'): # canta IA
+        if g.cantant and (g.players_mode[g.canta] == 'IA'): # canta IA
              # Wait 1 cilcle 
             if g.wait == 0:
                 g.wait = 1
@@ -418,25 +473,24 @@ def game_page(room: str, seat: int):
                 # Agafa observació i mask per agent_IA
                 g.last_obs = g.joc.get_state(g.joc.jugador_actual)
                 g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula))
-
             else: # la IA ha delegat
                 g.delegats = True
                 g.log.append(f'El jugador {SEAT_NAME[g.canta]} delega...')
                 g.canta = (g.canta + 2) % 4
         
-        if g.cantant and (g.PLAYER_MODE[g.canta] == 'huma'): # canta Huma
+        if g.cantant and (g.players_mode[g.canta] == 'huma'): # canta Huma
             redraw() # Si el jugador humà ha de cantar (directe o delegat) no sempre es feia el redraw bé
             return
 
         # ------------------ JUGAR CARTA LA IA ------------------  
-        if (not g.cantant) and (g.PLAYER_MODE[g.joc.jugador_actual] == 'IA'):
+        if (not g.cantant) and (g.players_mode[g.joc.jugador_actual] == 'IA'):
             card = g.agent_IA.choose_action(np.array(g.last_obs), np.array(g.last_mask), deterministic=True)
             g.play_card(g.joc.jugador_actual, card)
 
         # ------------------ COMPROVEM JUANYADOR DE BASE ------------------
         if len(g.table) == 4:
             # Wait 1 cilcle 
-            if g.wait <= 2:
+            if g.wait < 2:
                 g.wait += 1
                 redraw()
                 return
@@ -473,7 +527,7 @@ def game_page(room: str, seat: int):
             else:
                 g.log.append(f'Empat a {g.team_points["A"]}')
             g.joc.jugades_fetes = 0
-
+           
             if g.total_points['A'] >= g.punts_partida:
                 g.log.append(f'Partida guanyada per l\'equip A ({g.total_points["A"]} a {g.total_points["B"]})')
                 redraw()
@@ -494,12 +548,71 @@ def game_page(room: str, seat: int):
 
 # --------------------------- ARRANCA -------------------------------
 
-with ui.header().classes('justify-between'):    
-    ui.label('🂡 Botifarra — Demo NiceGUI').classes('text-xl font-bold')
-    ui.link('J1', '/game/TEST/0')
-    ui.link('J2', '/game/TEST/1')
-    ui.link('J3', '/game/TEST/2')
-    ui.link('J4', '/game/TEST/3')
+@ui.page('/')
+def lobby():
+    ui.label('🂡 Botifarra — Crear partida').classes('text-2xl font-bold mb-4')
+
+    room_in = ui.input('Nom de la partida').props('filled').classes('w-64')
+    room_in.value = 'TEST'
+
+    # selector HUMÀ/IA per a cada seient
+    seat_selects = []
+    with ui.row().classes('gap-4 my-2'):
+        for i in range(4):
+            if i == 0:
+                ops=['huma']
+            else:
+                ops=['huma', 'IA']
+            sel = ui.select(
+                options=ops,
+                value='huma' if i == 0 else 'IA',
+                label=f'Jugador J{i+1}',
+            ).props('filled').classes('w-32')
+
+            seat_selects.append(sel)
+
+    out = ui.column().classes('mt-4 gap-2')
+
+    def on_create():
+        out.clear()
+        room = (room_in.value or 'TEST').strip()
+        modes = {i: seat_selects[i].value for i in range(4)}
+        g = create_game(room, modes)
+
+        ui.label(f'Partida “{room}” creada. Comparteix aquests enllaços amb la resta de jugadors humans:').classes('font-semibold')
+
+        with out:
+            for seat in range(4):
+                if g.players_mode[seat] == 'huma':
+                    token = g.invite_tokens[seat]
+                    rel = f'/game/{room}/{seat}/{token}'
+                    with ui.row().classes('items-center gap-2'):
+                        ui.label(f'J{seat+1} (huma):').classes('w-28 font-medium')
+                        ui.input(value=rel).props('readonly').classes('w-[420px]')
+                        ui.button('Copiar', on_click=lambda r=rel:
+                                ui.run_javascript(f'navigator.clipboard.writeText(new URL("{r}", window.location.href).href);ui.notify("Copiat!")'))
+                        ui.link('Obrir', rel, new_tab=True)
+                else:
+                    ui.label(f'J{seat+1}: IA').classes('text-slate-600')
+
+            # petit resum d’ocupació en viu (opcional)
+            def refresh_status():
+                out2.clear()
+                with out2:
+                    ui.label('Ocupació actual:').classes('mt-2 font-medium')
+                    for seat in range(4):
+                        if g.players_mode[seat] == 'IA':
+                            status = f'IA preparada'
+                        else:
+                            status = f'jugador preparat' if g.seat_token_in_use[seat] else 'esperant jugador...'
+                        ui.label(f'J{seat+1}: {status}')
+
+            out2 = ui.column()
+            refresh_status()
+            ui.timer(2.0, refresh_status)  # refresca estat cada 2s
+
+    ui.button('Crear partida i generar enllaços', on_click=on_create).classes('mt-2')
 
 
+# ------------------- RUN UI ------------------
 ui.run(port=8080, reload=False, show=False)  # posa reload=True si vols autorecàrrega
