@@ -1,14 +1,7 @@
 from botifarra.carta import Carta
 from typing import List
 
-# Donat un trumfo (0 a 3) codificar-lo amb un one-hot de 4 elements
 def one_hot_encode_trumfo(trumfo: int) -> list:
-    encoding = [0] * 4  # Suposant 4 pals
-    if 0 <= trumfo < 4:
-        encoding[trumfo] = 1
-    return encoding
-
-def one_hot_encode_trumfo_v2(trumfo: int) -> list:
    # codifica les 48 cartes marcant les 12  que son trumfo amb 0. si botifarra llavors retorma 48 zeros
     encoding = [0] * 48  # Suposant 48 cartes
     if 0 <= trumfo < 4:

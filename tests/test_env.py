@@ -1,4 +1,4 @@
-from botifarra.botifarra_env_v2 import BotifarraEnvV2
+from botifarra.botifarra_env import BotifarraEnv
 from botifarra.rl_utils import decode_action_card
 import numpy as np
 
@@ -10,7 +10,7 @@ if __name__ == "__main__":
         threshold=10000 # show all elements, don't abbreviate with '...'
     )
 
-    env = BotifarraEnvV2()
+    env = BotifarraEnv()
     state, info = env.reset()
     print(f"state init:\n {state.reshape(5,48)}")
     print(f"\ninfo init:\n {info}")

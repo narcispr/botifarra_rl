@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Callable, Set, Tuple, Optional
 from nicegui import ui, app
-from botifarra.botifarra_env_v2 import BotifarraEnvV2
+from botifarra.botifarra_env import BotifarraEnv
 from botifarra.rl_utils import code_card, decode_action_card, one_hot_encode_hand
 from botifarra.pals import BOTIFARRA
 from botifarra.dqn_botifarra import DQNBotifarra
@@ -33,7 +33,7 @@ class Game:
         self.delegats = False  # si el jugador que canta ha delegat
         self.log = []
         self.subscribers = set()  # redibuix de cada vista
-        self.joc = BotifarraEnvV2()
+        self.joc = BotifarraEnv()
         self.agent_IA = DQNBotifarra()
         self.last_obs = None
         self.last_mask = None
@@ -77,7 +77,7 @@ class Game:
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
             self.last_mask = one_hot_encode_hand(
-                self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+                self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)
             )
 
             self.cantant = False
@@ -86,7 +86,7 @@ class Game:
     # Juguem nova mà
     def new_deal(self):
         # Repartir cartes
-        self.joc.reset_joc()
+        self.joc.reset_partida()
         self.joc.repartir_cartes()
 
         for s in range(4):
@@ -112,7 +112,7 @@ class Game:
             return
 
         # Mira cartes vàlides pel jugador
-        ma_valida = self.joc.jugadors[seat].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+        ma_valida = self.joc.jugadors[seat].cartes_valides(self.joc.trumfo, self.joc.taula)
         carta_jugada = decode_action_card(card)
         if carta_jugada not in ma_valida:
             self.log.append(f'{SEAT_NAME[seat]}, no pots jugar aquesta carta!')
@@ -138,7 +138,8 @@ class Game:
             
             # Agafa observació i mask per agent_IA
             self.last_obs = self.joc.get_state(self.joc.jugador_actual)
-            ma_valida = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)[0]
+            ma_valida = self.joc.jugadors[self.joc.jugador_actual].cartes_valides(self.joc.trumfo, self.joc.taula)
+            print("ma valida:", ma_valida)
             self.last_mask = one_hot_encode_hand(ma_valida)
 
         self.broadcast()
@@ -416,7 +417,7 @@ def game_page(room: str, seat: int):
                 # Preparem per 1a jugada
                 # Agafa observació i mask per agent_IA
                 g.last_obs = g.joc.get_state(g.joc.jugador_actual)
-                g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula)[0])
+                g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula))
 
             else: # la IA ha delegat
                 g.delegats = True
@@ -459,7 +460,7 @@ def game_page(room: str, seat: int):
 
             # Agafa observació i mask per agent_IA
             g.last_obs = g.joc.get_state(g.joc.jugador_actual)
-            g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula)[0])
+            g.last_mask = one_hot_encode_hand(g.joc.jugadors[g.joc.jugador_actual].cartes_valides(g.joc.trumfo, g.joc.taula))
             redraw()
         # ------------------ FINAL MA ------------------
         if g.joc.jugades_fetes >= 12:
