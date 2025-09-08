@@ -1,18 +1,15 @@
 # test the agent
 from botifarra.botifarra_env import BotifarraEnv
-from botifarra.rl_utils import decode_action_card
-from botifarra.dqn_botifarra import DQNBotifarra
-
+from botifarra.agent_dqn import DQNAgent
+from botifarra.agent import AgentBotifarra
 import numpy as np
 
 NUMERO_PARTIDES = 100
-PESOS_1 = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_10k_dqn"
-PESOS_2 = "/home/narcis/catkin_ws/src/botifarra/agents/botifarra_200k_dqn_256x128"
+PESOS_1 = "/home/narcis/catkin_ws/src/botifarra/agents/tmp_dqn_10000"
+PESOS_2 = "/home/narcis/catkin_ws/src/botifarra/agents/tmp_dqn_1000000"
 
-agent_A = DQNBotifarra(hidden_layers=[128, 128])
-agent_A.load_weights(PESOS_1)
-agent_B = DQNBotifarra(hidden_layers=[256, 128])
-agent_B.load_weights(PESOS_2)
+agent_A = AgentBotifarra()
+agent_B = DQNAgent(weights_path=PESOS_2)
 env = BotifarraEnv()
 
 victories_a = 0
@@ -36,11 +33,11 @@ for partides in range(NUMERO_PARTIDES):
         done = False
         while not done:
             # L'agent selecciona la carta a jugar (d'entre les vàlides!, d'aquí el mask)
-            if info['proxim_jugador'] == 0 or info['proxim_jugador'] == 2:
-                agent = agent_A
-            else:
-                agent = agent_B
-            action = agent.choose_action(obs, np.array(info['mask']), deterministic=True)
+            if info['proxim_jugador'] == 0 or info['proxim_jugador'] == 2:  # TEAM A action selection
+                action = agent_A.choose_action(obs, np.array(info['mask']))
+            else:                                                           # TEAM B action selection
+                action = agent_B.choose_action(obs, np.array(info['mask']))
+            
             # print(f"Jugador {(info['proxim_jugador']-1) % 4 + 1} Carta jugada: {decode_action_card(action)}")
             state, reward, done, _, info = env.step(action)
             # if "guanyador" in info:
