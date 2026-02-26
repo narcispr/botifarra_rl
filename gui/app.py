@@ -51,7 +51,7 @@ class Game:
         self.seat_token_in_use: Dict[int, bool] = {0: False, 1: False, 2: False, 3: False}
 
         # Load IA weights
-        self.agent_IA.load_weights("../agents/botifarra_v2_200k_dqn")
+        self.agent_IA.load_weights("../agents/botifarra_1M")
 
     def issue_invites(self):
         """Genera o renova tokens per a tots els seients humans."""
@@ -615,4 +615,4 @@ def lobby():
 
 
 # ------------------- RUN UI ------------------
-ui.run(port=8080, reload=False, show=False)  # posa reload=True si vols autorecàrrega
+ui.run(port=8085, reload=False, show=False)  # posa reload=True si vols autorecàrrega
